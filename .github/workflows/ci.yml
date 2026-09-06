@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: ui/yarn.lock
+
+      - name: Install UI dependencies
+        run: yarn --cwd ui install --frozen-lockfile
+
+      - name: Lint UI
+        run: yarn --cwd ui lint
+
+      - name: Type check and build UI
+        run: yarn --cwd ui build
+
+      - name: Syntax check agent sources
+        run: |
+          find bin src -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Check i18n catalogues are in sync
+        run: |
+          node --input-type=module -e "
+            const { vi } = await import('./src/i18n/vi.js');
+            const { en } = await import('./src/i18n/en.js');
+            const a = Object.keys(vi), b = Object.keys(en);
+            const missingEn = a.filter((k) => !b.includes(k));
+            const missingVi = b.filter((k) => !a.includes(k));
+            if (missingEn.length || missingVi.length) {
+              console.error('missing in en:', missingEn);
+              console.error('missing in vi:', missingVi);
+              process.exit(1);
+            }
+            console.log('i18n ok:', a.length, 'keys');
+          "
+
+      - name: Verify package contents
+        run: npm publish --dry-run
