@@ -1,0 +1,76 @@
+{
+  "name": "@hyydev/printagent",
+  "version": "1.0.0",
+  "description": "Local print agent with REST API, WebSocket, MCP server and web UI",
+  "keywords": [
+    "print",
+    "printer",
+    "print-agent",
+    "pdf",
+    "escpos",
+    "thermal-printer",
+    "cups",
+    "mcp",
+    "websocket",
+    "rest-api",
+    "handlebars",
+    "invoice",
+    "receipt"
+  ],
+  "homepage": "https://github.com/huy97/printagent#readme",
+  "bugs": {
+    "url": "https://github.com/huy97/printagent/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huy97/printagent.git"
+  },
+  "license": "MIT",
+  "author": "huy97 <letienhuy.dev@gmail.com>",
+  "type": "module",
+  "main": "src/server/index.js",
+  "bin": {
+    "printagent": "bin/printagent.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "web",
+    "install.sh",
+    "install.ps1",
+    "llms.txt",
+    "llms.en.txt",
+    "README.en.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "start": "node bin/printagent.js start",
+    "dev": "node --watch bin/printagent.js start",
+    "mcp": "node bin/printagent.js mcp",
+    "printers": "node bin/printagent.js printers",
+    "ui:dev": "yarn --cwd ui dev",
+    "ui:build": "yarn --cwd ui build",
+    "build": "yarn --cwd ui build",
+    "prepublishOnly": "yarn build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^4.21.2",
+    "handlebars": "^4.7.8",
+    "multer": "^2.0.2",
+    "puppeteer": "^24.15.0",
+    "qrcode": "^1.5.4",
+    "ws": "^8.18.0",
+    "zod": "^3.25.76"
+  }
+}

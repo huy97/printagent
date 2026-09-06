@@ -1,0 +1,207 @@
+# PrintAgent
+
+> A print agent that runs on a local machine: it takes a PDF, or a template plus JSON variables, over REST, WebSocket and MCP, then sends it straight to a connected printer. It listens on `http://127.0.0.1:7788` by default and can be exposed to the Internet through a Cloudflare tunnel or ngrok.
+
+Full documentation: [README.en.md](README.en.md). This file is the condensed version for AI agents and integrators; a running agent serves it at `GET /llms.txt?lang=en`.
+
+The agent describes itself through three addresses that need no API key:
+
+| Address | Content |
+| --- | --- |
+| `GET /.well-known/printagent.json` | Discovery endpoint: version, where to read the docs, the three entry points, how to authenticate |
+| `GET /openapi.json` | OpenAPI 3.1 specification of all 34 REST endpoints, for generating a client or loading as tools |
+| `GET /llms.txt` | This file |
+
+Suggested integration order: read `/.well-known/printagent.json` → `GET /api/printers` for printer names → `GET /api/templates/:id` and read `sampleData` to learn the data shape → `POST /api/print/template`.
+
+## Authentication
+
+- Header `x-api-key: pa_xxx`, or `Authorization: Bearer pa_xxx`, or query `?apiKey=pa_xxx` (WebSocket).
+- Get a key: `node bin/printagent.js key` on the agent machine.
+- Requests from the agent machine itself skip the key only when all four hold: a loopback address, a loopback `Host` header, no proxy header, and `Sec-Fetch-Site` of `same-origin`/`none` with an `Origin` of the agent itself. Requests through the tunnel or started by another website never qualify.
+- `GET /api/health` needs no key.
+
+## Printing a PDF file
+
+`POST /api/print/pdf` — pick one source: `content` (base64), `url`, `filePath`, or a multipart upload in the `file` field.
+
+```json
+{ "content": "JVBERi0xLj...", "printer": "HP_LaserJet", "copies": 2, "wait": true }
+```
+
+Options: `copies`, `title`, `options.duplex` (`none|long|short`), `options.paperSize`, `options.orientation`, `options.fitToPage`, `options.raw`, `options.extraOptions`. Use `wait: true` to return only once printing has finished.
+
+`filePath` is disabled by default; `url` accepts http/https only and blocks private network ranges.
+
+## Printing from a template + JSON variables
+
+`POST /api/print/template`
+
+```json
+{
+  "templateId": "vat-invoice-a4",
+  "data": { "invoice": { "number": "00000125" }, "items": [], "total": 8855000 },
+  "printer": "HP_LaserJet",
+  "copies": 1,
+  "wait": true
+}
+```
+
+Pass a template inline instead of `templateId`: `{ "template": "<h1>{{code}}</h1>", "engine": "html", "data": {} }`.
+
+`POST /api/print/render` renders without printing and returns the PDF (`?format=html` or `?format=base64`).
+
+## Templates
+
+Handlebars engine, two kinds: `html` (rendered into a PDF by Chromium) and `text` (raw ESC/POS sent to a thermal printer).
+
+Bundled templates:
+
+| Id | Size | Used for |
+| --- | --- | --- |
+| `invoice-a4` | A4 | Simple sales invoice |
+| `bill-80mm` | 80mm | Thermal printer receipt through PDF |
+| `receipt-escpos` | raw | Plain text receipt, raw mode |
+| `vat-invoice-a4` | A4 | VAT invoice, printed representation of an e-invoice |
+| `pos-invoice-80mm` | 80mm | E-invoice issued from a cash register |
+| `cash-receipt-a5` | A5 | Cash receipt, Vietnamese form 01-TT |
+
+Read a template's data shape with `GET /api/templates/:id` and look at `sampleData` — that is the exact payload shape for `data`.
+
+Helpers: `currency`, `formatNumber`, `formatDate`, `vndWords` (spells an amount out in Vietnamese words), `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (label left, number right, aligned to a column count), `ascii` (strips Vietnamese diacritics for thermal printers), `json`, `qr`, `qrDataUri`.
+
+Page settings: `page.format`, `page.width`/`page.height`, `page.landscape`, `page.marginTop|marginRight|marginBottom|marginLeft`. For roll paper set `page.height = "auto"` so the page is cut to the content height.
+
+## What a print request returns
+
+Both `/api/print/pdf` and `/api/print/template` return HTTP 202 with a job object:
+
+```json
+{
+  "id": "job_9f2c1a44",
+  "type": "template",
+  "status": "queued",
+  "printer": "HP_LaserJet",
+  "copies": 1,
+  "templateId": "vat-invoice-a4",
+  "bytes": null,
+  "attempts": 0,
+  "origin": "api:pos-terminal",
+  "error": null,
+  "createdAt": "2026-09-06T08:12:44.310Z",
+  "startedAt": null,
+  "finishedAt": null
+}
+```
+
+The status moves `queued` → `rendering` → `printing` → `completed`, or stops at `failed` (read `error`) or `canceled`. With `wait: true` the API only returns once the job is `completed` or `failed`.
+
+## Errors
+
+Every error uses the same shape:
+
+```json
+{
+  "error": {
+    "code": "bad_request",
+    "key": "error.printer_none_installed",
+    "message": "No printer is installed on this machine yet"
+  }
+}
+```
+
+`code` is one of `bad_request` (400), `unauthorized` (401), `not_found` (404), `internal_error` (500). `key` is a stable message code, useful for your own translation or for branching. `message` is already translated and can be shown to an end user as is.
+
+## Language
+
+The agent answers in Vietnamese or English. Priority when picking the language of a request: the `x-locale` header, the `?lang=` query, the `accept-language` header, then `agent.locale` from the configuration (default `vi`). Responses carry a `content-language` header. `GET /llms.txt` follows the same rule, so `GET /llms.txt?lang=en` returns this English version.
+
+Logs, the CLI and the terminal setup screen follow the `PRINTAGENT_LANG` environment variable, falling back to `agent.locale`.
+
+## Limits
+
+- Multipart uploads are capped at 64MB.
+- Jobs run in parallel up to `queue.concurrency` (default 10); the rest queue up.
+- Failed jobs are retried `queue.maxRetries` times (default 1).
+- History keeps the last `queue.keepJobs` jobs (default 300), document files are kept for `queue.keepFilesHours` hours (default 48).
+- Ten wrong API keys within a minute block that address for five minutes (HTTP 429, `error.too_many_attempts`, with `retry-after`), counted across REST and the WebSocket together. Authenticated requests are not rate limited: throttle at the tunnel or reverse proxy layer if you need it.
+- The tunnel refuses to start while `auth.enabled = false` or while no API key exists.
+
+## Other endpoints
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/health` | Agent status, no key needed |
+| GET | `/api/info` | Detailed information, renderer check |
+| GET | `/api/printers?refresh=1` | Printer list |
+| POST | `/api/printers/scan` | Rescan printers |
+| GET | `/api/printers/:name` | Printer details |
+| POST | `/api/printers/:name/default` | Set the default printer |
+| POST | `/api/printers/:name/test` | Print a test page |
+| GET/POST | `/api/templates` | List / create a template |
+| GET/PUT/DELETE | `/api/templates/:id` | Read / update / delete a template |
+| POST | `/api/templates/:id/preview` | Render a template into a PDF |
+| GET | `/api/jobs` | Job list (`?status=`, `?limit=`) |
+| GET | `/api/jobs/:id` | Job details |
+| GET | `/api/jobs/:id/file` | Download the printed file |
+| POST | `/api/jobs/:id/cancel` | Cancel a job |
+| POST | `/api/jobs/:id/retry` | Print a job again |
+| GET/PUT | `/api/settings` | Read / update the configuration |
+| GET/POST/DELETE | `/api/apikeys` | Manage API keys |
+| GET | `/api/tunnel` | Tunnel status |
+| POST | `/api/tunnel/start`, `/api/tunnel/stop` | Start / stop the tunnel |
+| GET | `/api/setup`, `/api/setup/progress` | Setup results and progress |
+| POST | `/api/setup/run`, `/api/setup/service` | Run setup, register background startup (local machine only) |
+| GET | `/openapi.json` | OpenAPI 3.1 specification, no key needed |
+| GET | `/.well-known/printagent.json` | Discovery endpoint for AI agents, no key needed |
+
+## WebSocket
+
+`ws://127.0.0.1:7788/ws?apiKey=pa_xxx`, every message is JSON `{ "id", "type", "payload" }`.
+
+Commands: `ping`, `status`, `printers.list`, `printers.scan`, `templates.list`, `templates.get`, `render.template`, `print.pdf`, `print.template`, `jobs.list`, `job.get`, `job.cancel`, `tunnel.status`, `subscribe`.
+
+Pushed events: `job.created`, `job.updated`, `printer.changed`, `tunnel.changed`, `log`. Subscribe with `{"type":"subscribe","payload":{"events":["job","printer","tunnel","log"]}}`.
+
+## MCP
+
+- Streamable HTTP: `http://127.0.0.1:7788/mcp` with the `x-api-key` header.
+- stdio: `npx @hyydev/printagent mcp` (or `node bin/printagent.js mcp` when running from source), environment variables `PRINTAGENT_URL` and `PRINTAGENT_API_KEY`; add `--standalone` so MCP prints on its own without a running agent.
+
+Tools: `list_printers`, `agent_status`, `print_pdf`, `print_template`, `render_template`, `list_templates`, `get_template`, `save_template`, `delete_template`, `list_jobs`, `get_job`, `cancel_job`, `print_test_page`.
+
+Tool titles and descriptions follow the agent language (`PRINTAGENT_LANG` or `agent.locale`).
+
+## CLI
+
+```
+printagent start [--port 7788] [--host 0.0.0.0] [--no-open]
+printagent setup [--service|--no-service]
+printagent service [status|install|uninstall]
+printagent doctor
+printagent mcp [--standalone] [--url ...] [--key ...]
+printagent printers
+printagent test [--printer NAME]
+printagent config [set-default-printer NAME]
+printagent key
+printagent tunnel [check|cloudflare|ngrok]
+```
+
+Set `PRINTAGENT_LANG=en` to run the CLI in English, `PRINTAGENT_LANG=vi` for Vietnamese.
+
+## Data on the machine
+
+```
+~/.printagent/
+├── config.json          # the whole configuration
+├── templates/<id>/      # template.hbs|template.txt + meta.json
+├── files/               # job files
+├── jobs/index.json      # job history
+└── logs/                # daily logs
+```
+
+## Integration notes
+
+- Jobs are asynchronous: without `wait: true` the API returns immediately with `status: "queued"`; follow up through `GET /api/jobs/:id` or WebSocket events.
+- Printers are addressed by their system name (`GET /api/printers`); leave it empty to use the agent default printer.
+- When exposing the agent to the Internet, always turn `auth.enabled` on and share API keys only with systems that truly need them.

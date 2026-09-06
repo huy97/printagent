@@ -1,0 +1,203 @@
+# PrintAgent
+
+> Agent in ấn chạy trên máy local: nhận PDF hoặc template + biến JSON qua REST, WebSocket và MCP rồi gửi thẳng tới máy in đang kết nối. Mặc định lắng nghe tại `http://127.0.0.1:7788`, có thể mở ra Internet qua Cloudflare tunnel hoặc ngrok.
+
+Tài liệu đầy đủ: [README.md](README.md). File này là bản rút gọn cho tác nhân AI và lập trình viên tích hợp; agent đang chạy phục vụ nó tại `GET /llms.txt`.
+
+Agent tự mô tả mình qua ba địa chỉ không cần API key:
+
+| Địa chỉ | Nội dung |
+| --- | --- |
+| `GET /.well-known/printagent.json` | Điểm khám phá: phiên bản, nơi đọc tài liệu, ba điểm truy cập, cách xác thực |
+| `GET /openapi.json` | Đặc tả OpenAPI 3.1 của cả 34 endpoint REST, dùng để sinh client hoặc nạp làm tool |
+| `GET /llms.txt` | Chính file này |
+
+Trình tự tích hợp gợi ý: đọc `/.well-known/printagent.json` → `GET /api/printers` lấy tên máy in → `GET /api/templates/:id` đọc `sampleData` để biết khuôn dữ liệu → `POST /api/print/template`.
+
+## Xác thực
+
+- Header `x-api-key: pa_xxx`, hoặc `Authorization: Bearer pa_xxx`, hoặc query `?apiKey=pa_xxx` (WebSocket).
+- Lấy key: `node bin/printagent.js key` trên máy chạy agent.
+- Request từ chính máy chạy agent được miễn key khi thoả cả bốn điều kiện: địa chỉ loopback, header `Host` loopback, không có header proxy, và `Sec-Fetch-Site` là `same-origin`/`none` với `Origin` là chính agent. Request qua tunnel hoặc do một website khác khởi tạo đều không lọt.
+- `GET /api/health` không cần key.
+
+## In một file PDF
+
+`POST /api/print/pdf` — chọn một nguồn: `content` (base64), `url`, `filePath`, hoặc upload multipart field `file`.
+
+```json
+{ "content": "JVBERi0xLj...", "printer": "HP_LaserJet", "copies": 2, "wait": true }
+```
+
+Tuỳ chọn: `copies`, `title`, `options.duplex` (`none|long|short`), `options.paperSize`, `options.orientation`, `options.fitToPage`, `options.raw`, `options.extraOptions`. `wait: true` để chờ in xong mới trả về.
+
+`filePath` mặc định bị tắt; `url` chỉ nhận http/https và chặn dải mạng nội bộ.
+
+## In từ template + biến JSON
+
+`POST /api/print/template`
+
+```json
+{
+  "templateId": "vat-invoice-a4",
+  "data": { "invoice": { "number": "00000125" }, "items": [], "total": 8855000 },
+  "printer": "HP_LaserJet",
+  "copies": 1,
+  "wait": true
+}
+```
+
+Truyền template inline thay cho `templateId`: `{ "template": "<h1>{{code}}</h1>", "engine": "html", "data": {} }`.
+
+`POST /api/print/render` render mà không in, trả PDF (`?format=html` hoặc `?format=base64`).
+
+## Template
+
+Engine Handlebars, hai kiểu: `html` (render thành PDF bằng Chromium) và `text` (gửi raw ESC/POS tới máy in nhiệt).
+
+Mẫu tạo sẵn:
+
+| Id | Khổ | Dùng cho |
+| --- | --- | --- |
+| `invoice-a4` | A4 | Hoá đơn bán hàng đơn giản |
+| `bill-80mm` | 80mm | Bill máy in nhiệt qua PDF |
+| `receipt-escpos` | raw | Bill text thuần, chế độ raw |
+| `vat-invoice-a4` | A4 | Hoá đơn GTGT, bản thể hiện hoá đơn điện tử |
+| `pos-invoice-80mm` | 80mm | Hoá đơn điện tử khởi tạo từ máy tính tiền |
+| `cash-receipt-a5` | A5 | Phiếu thu tiền mặt mẫu 01-TT |
+
+Lấy cấu trúc dữ liệu của một mẫu bằng `GET /api/templates/:id` rồi đọc `sampleData` — đó là khuôn payload đúng cho `data`.
+
+Helper: `currency`, `formatNumber`, `formatDate`, `vndWords` (đọc số tiền thành chữ tiếng Việt), `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (căn nhãn trái - số phải theo số cột), `ascii` (bỏ dấu tiếng Việt cho máy in nhiệt), `json`, `qr`, `qrDataUri`.
+
+Cấu hình trang: `page.format`, `page.width`/`page.height`, `page.landscape`, `page.marginTop|marginRight|marginBottom|marginLeft`. Với giấy cuộn đặt `page.height = "auto"` để cắt theo chiều cao nội dung.
+
+## Kết quả trả về của một lệnh in
+
+Cả `/api/print/pdf` và `/api/print/template` trả HTTP 202 kèm object job:
+
+```json
+{
+  "id": "job_9f2c1a44",
+  "type": "template",
+  "status": "queued",
+  "printer": "HP_LaserJet",
+  "copies": 1,
+  "templateId": "vat-invoice-a4",
+  "bytes": null,
+  "attempts": 0,
+  "origin": "api:pos-terminal",
+  "error": null,
+  "createdAt": "2026-09-06T08:12:44.310Z",
+  "startedAt": null,
+  "finishedAt": null
+}
+```
+
+Trạng thái đi theo thứ tự `queued` → `rendering` → `printing` → `completed`, hoặc dừng ở `failed` (đọc `error`) và `canceled`. Với `wait: true` thì API chỉ trả về khi job đã `completed` hoặc `failed`.
+
+## Lỗi
+
+Mọi lỗi trả về cùng một khuôn:
+
+```json
+{
+  "error": {
+    "code": "bad_request",
+    "key": "error.printer_none_installed",
+    "message": "Agent chưa thấy máy in nào được cài trên máy này"
+  }
+}
+```
+
+`code` là một trong `bad_request` (400), `unauthorized` (401), `not_found` (404), `internal_error` (500). `key` là mã thông báo ổn định, dùng khi muốn tự dịch hoặc phân nhánh xử lý. `message` đã dịch sẵn, hiển thị thẳng cho người dùng cuối được.
+
+## Ngôn ngữ
+
+Agent trả lời bằng tiếng Việt hoặc tiếng Anh. Thứ tự ưu tiên khi chọn ngôn ngữ cho một request: header `x-locale`, query `?lang=`, header `accept-language`, rồi `agent.locale` trong cấu hình (mặc định `vi`). Response kèm header `content-language`. `GET /llms.txt` cũng theo quy tắc này, nên `GET /llms.txt?lang=en` trả bản tiếng Anh.
+
+Ngôn ngữ của log, CLI và màn cài đặt trong terminal lấy theo biến môi trường `PRINTAGENT_LANG`, nếu không có thì theo `agent.locale`.
+
+## Giới hạn
+
+- File upload multipart tối đa 64MB.
+- Số job chạy song song theo `queue.concurrency` (mặc định 10), phần còn lại xếp hàng.
+- Job hỏng được thử lại `queue.maxRetries` lần (mặc định 1).
+- Lịch sử giữ `queue.keepJobs` job gần nhất (mặc định 300), file tài liệu giữ `queue.keepFilesHours` giờ (mặc định 48).
+- Sai API key 10 lần trong một phút thì địa chỉ đó bị chặn 5 phút (HTTP 429, `error.too_many_attempts`, kèm `retry-after`), tính chung cho REST và WebSocket. Request đã xác thực đúng không bị giới hạn tốc độ: chặn thêm ở tầng tunnel hoặc reverse proxy nếu cần.
+- Tunnel không bật được khi `auth.enabled = false` hoặc chưa có API key nào.
+
+## Các endpoint khác
+
+| Method | Path | Mô tả |
+| --- | --- | --- |
+| GET | `/api/health` | Trạng thái agent, không cần key |
+| GET | `/api/info` | Thông tin chi tiết, kiểm tra renderer |
+| GET | `/api/printers?refresh=1` | Danh sách máy in |
+| POST | `/api/printers/scan` | Quét lại máy in |
+| GET | `/api/printers/:name` | Chi tiết máy in |
+| POST | `/api/printers/:name/default` | Đặt máy in mặc định |
+| POST | `/api/printers/:name/test` | In trang thử |
+| GET/POST | `/api/templates` | Danh sách / tạo template |
+| GET/PUT/DELETE | `/api/templates/:id` | Xem / sửa / xoá template |
+| POST | `/api/templates/:id/preview` | Render template thành PDF |
+| GET | `/api/jobs` | Danh sách job (`?status=`, `?limit=`) |
+| GET | `/api/jobs/:id` | Chi tiết job |
+| GET | `/api/jobs/:id/file` | Tải file đã in |
+| POST | `/api/jobs/:id/cancel` | Huỷ job |
+| POST | `/api/jobs/:id/retry` | In lại job |
+| GET/PUT | `/api/settings` | Xem / sửa cấu hình |
+| GET/POST/DELETE | `/api/apikeys` | Quản lý API key |
+| GET | `/api/tunnel` | Trạng thái tunnel |
+| POST | `/api/tunnel/start`, `/api/tunnel/stop` | Bật / tắt tunnel |
+| GET | `/api/setup`, `/api/setup/progress` | Kết quả và tiến độ cài đặt |
+| POST | `/api/setup/run`, `/api/setup/service` | Chạy cài đặt, đăng ký chạy nền (chỉ từ máy local) |
+| GET | `/openapi.json` | Đặc tả OpenAPI 3.1, không cần key |
+| GET | `/.well-known/printagent.json` | Điểm khám phá cho tác nhân AI, không cần key |
+
+## WebSocket
+
+`ws://127.0.0.1:7788/ws?apiKey=pa_xxx`, mỗi tin nhắn là JSON `{ "id", "type", "payload" }`.
+
+Lệnh: `ping`, `status`, `printers.list`, `printers.scan`, `templates.list`, `templates.get`, `render.template`, `print.pdf`, `print.template`, `jobs.list`, `job.get`, `job.cancel`, `tunnel.status`, `subscribe`.
+
+Sự kiện đẩy về: `job.created`, `job.updated`, `printer.changed`, `tunnel.changed`, `log`. Đăng ký bằng `{"type":"subscribe","payload":{"events":["job","printer","tunnel","log"]}}`.
+
+## MCP
+
+- Streamable HTTP: `http://127.0.0.1:7788/mcp` với header `x-api-key`.
+- stdio: `npx @hyydev/printagent mcp` (hoặc `node bin/printagent.js mcp` khi chạy từ mã nguồn), biến môi trường `PRINTAGENT_URL` và `PRINTAGENT_API_KEY`; thêm `--standalone` để MCP tự in mà không cần agent chạy nền.
+
+Tool: `list_printers`, `agent_status`, `print_pdf`, `print_template`, `render_template`, `list_templates`, `get_template`, `save_template`, `delete_template`, `list_jobs`, `get_job`, `cancel_job`, `print_test_page`.
+
+## CLI
+
+```
+printagent start [--port 7788] [--host 0.0.0.0] [--no-open]
+printagent setup [--service|--no-service]
+printagent service [status|install|uninstall]
+printagent doctor
+printagent mcp [--standalone] [--url ...] [--key ...]
+printagent printers
+printagent test [--printer TEN]
+printagent config [set-default-printer TEN]
+printagent key
+printagent tunnel [check|cloudflare|ngrok]
+```
+
+## Dữ liệu trên máy
+
+```
+~/.printagent/
+├── config.json          # toàn bộ cấu hình
+├── templates/<id>/      # template.hbs|template.txt + meta.json
+├── files/               # file của các job
+├── jobs/index.json      # lịch sử job
+└── logs/                # log theo ngày
+```
+
+## Lưu ý khi tích hợp
+
+- Job là bất đồng bộ: không có `wait: true` thì API trả về ngay với `status: "queued"`, theo dõi tiếp qua `GET /api/jobs/:id` hoặc sự kiện WebSocket.
+- Máy in được gọi theo tên hệ thống (`GET /api/printers`), bỏ trống thì dùng máy in mặc định của agent.
+- Khi mở ra Internet, luôn bật `auth.enabled` và chỉ chia sẻ API key cho hệ thống thực sự cần.
