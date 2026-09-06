@@ -189,9 +189,13 @@ Tool titles and descriptions follow the agent language (`PRINTAGENT_LANG` or `ag
 
 ## CLI
 
+Install on a machine without Node (downloads a portable Node, no admin rights):
+`curl -fsSL https://raw.githubusercontent.com/huy97/printagent/main/install.sh | bash`
+Windows: `irm https://raw.githubusercontent.com/huy97/printagent/main/install.ps1 | iex`
+
 ```
 printagent start [--port 7788] [--host 0.0.0.0] [--no-open]
-printagent setup [--service|--no-service]
+printagent setup [--service|--no-service] [--templates|--no-templates]
 printagent service [status|install|uninstall]
 printagent doctor
 printagent mcp [--standalone] [--url ...] [--key ...]

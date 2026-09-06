@@ -1,6 +1,11 @@
+import path from 'node:path';
 import process from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { PATHS } from '../core/paths.js';
 import { tryRun } from '../util/exec.js';
+
+const SUMATRA_FALLBACK_VERSION = '3.6.1';
 
 export function hasCommand(command) {
   const probe = process.platform === 'win32' ? 'where' : 'which';
@@ -127,6 +132,87 @@ export async function installPackage(names, options = {}) {
   const [command, args] = LINUX_INSTALL[manager](names.linux);
   if (manager === 'apt-get') await sudo(['apt-get', 'update'], options);
   return { ok: await sudo([command, ...args], options), manager };
+}
+
+export function toolsDir() {
+  const dir = path.join(PATHS.data, 'tools');
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+async function download(url, dest) {
+  const response = await fetch(url, { redirect: 'follow' });
+  if (!response.ok) return false;
+  writeFileSync(dest, Buffer.from(await response.arrayBuffer()));
+  return true;
+}
+
+/**
+ * Trang phát hành không có link "latest" nên lấy tag mới nhất trên GitHub
+ * (dạng "3.6.1rel"), lỗi mạng hay hết quota thì dùng bản đã kiểm chứng.
+ */
+async function latestSumatraVersion() {
+  try {
+    const response = await fetch('https://api.github.com/repos/sumatrapdfreader/sumatrapdf/releases/latest', {
+      headers: { accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return SUMATRA_FALLBACK_VERSION;
+    const tag = String((await response.json()).tag_name ?? '');
+    const version = tag.match(/^\d+(\.\d+)+/)?.[0];
+    return version || SUMATRA_FALLBACK_VERSION;
+  } catch {
+    return SUMATRA_FALLBACK_VERSION;
+  }
+}
+
+/**
+ * Tải SumatraPDF bản portable về thư mục dữ liệu. Không cần quyền admin và không
+ * phụ thuộc winget/choco, nên máy mới tinh vẫn in được PDF đúng khổ giấy.
+ */
+export async function installSumatraPortable({ log } = {}) {
+  if (process.platform !== 'win32') return null;
+
+  const version = await latestSumatraVersion();
+  const bits = process.arch === 'ia32' ? '32' : '64';
+  const url = `https://www.sumatrapdfreader.org/dl/rel/${version}/SumatraPDF-${version}-${bits}.zip`;
+  const dir = toolsDir();
+  const archive = path.join(dir, 'sumatrapdf.zip');
+  const staging = path.join(dir, 'sumatrapdf-unzip');
+  const target = path.join(dir, 'SumatraPDF.exe');
+  // Nháy đơn trong đường dẫn (tên người dùng lạ) sẽ phá chuỗi lệnh PowerShell.
+  const psQuote = (value) => `'${value.replace(/'/g, "''")}'`;
+
+  try {
+    log?.(`SumatraPDF ${version}: ${url}`);
+    if (!(await download(url, archive))) return null;
+
+    rmSync(staging, { recursive: true, force: true });
+    const unzipped = await runVisible(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        `Expand-Archive -LiteralPath ${psQuote(archive)} -DestinationPath ${psQuote(staging)} -Force`,
+      ],
+      { log, timeout: 180000 },
+    );
+    if (!unzipped) return null;
+
+    const exe = readdirSync(staging).find((name) => name.toLowerCase().endsWith('.exe'));
+    if (!exe) return null;
+    rmSync(target, { force: true });
+    renameSync(path.join(staging, exe), target);
+    return existsSync(target) ? target : null;
+  } catch {
+    return null;
+  } finally {
+    rmSync(archive, { force: true });
+    rmSync(staging, { recursive: true, force: true });
+  }
 }
 
 export function openBrowser(url) {

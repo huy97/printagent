@@ -107,7 +107,8 @@ export const vi = {
   'setup.step.print_tool.found': '{path}',
   'setup.step.print_tool.missing': 'Không thấy SumatraPDF',
   'setup.step.print_tool.installing': 'Đang cài SumatraPDF...',
-  'setup.step.print_tool.hint': 'Sẽ dùng PowerShell PrintTo thay thế (chậm hơn, ít tuỳ chọn). Cài tay: winget install SumatraPDF.SumatraPDF',
+  'setup.step.print_tool.download_failed': 'Tải bản portable thất bại, thử qua trình quản lý gói...',
+  'setup.step.print_tool.hint': 'Bấm cài đặt tự động để tải bản portable về thư mục dữ liệu, không cần quyền admin. Bỏ qua thì agent dùng PowerShell PrintTo (chậm hơn, ít tuỳ chọn).',
 
   'setup.step.api_key': 'API key',
   'setup.step.api_key.existing': '{count} khoá đã có',

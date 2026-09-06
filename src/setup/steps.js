@@ -8,12 +8,21 @@ import { getConfig, updateConfig } from '../core/config.js';
 import { apiKeyValue, shortId } from '../util/id.js';
 import { tryRun } from '../util/exec.js';
 import * as printers from '../printers/index.js';
+import { findSumatra } from '../printers/windows.js';
 import { renderHealth, findSystemChrome } from '../render/pdf.js';
 import { listTemplates } from '../render/templates.js';
 import { seedTemplates } from '../render/seed.js';
 import { detectBinaries } from '../core/tunnel.js';
 import { serviceStatus, installService, entryScript } from './service.js';
-import { hasCommand, runVisible, runBash, installPackage, detectPackageManager, sudo } from './tools.js';
+import {
+  hasCommand,
+  runVisible,
+  runBash,
+  installPackage,
+  installSumatraPortable,
+  detectPackageManager,
+  sudo,
+} from './tools.js';
 import { t } from '../i18n/index.js';
 
 const MIN_NODE_MAJOR = 20;
@@ -299,6 +308,13 @@ const STEP_LIST = [
     async fix({ log }) {
       if (process.platform !== 'win32') return false;
       log?.(t('setup.step.print_tool.installing'));
+      // Bản portable không cần quyền admin nên chạy được cả trên máy chưa có winget.
+      const portable = await installSumatraPortable({ log });
+      if (portable) {
+        updateConfig({ printing: { sumatraPath: portable } });
+        return true;
+      }
+      log?.(t('setup.step.print_tool.download_failed'));
       const result = await installPackage({ winget: 'SumatraPDF.SumatraPDF', choco: 'sumatrapdf' }, { log });
       return result.ok;
     },
@@ -391,17 +407,6 @@ const STEP_LIST = [
     },
   },
 ];
-
-function findSumatra() {
-  const candidates = [
-    getConfig().printing.sumatraPath,
-    process.env.SUMATRA_PATH,
-    path.join(process.env['ProgramFiles'] ?? 'C:/Program Files', 'SumatraPDF', 'SumatraPDF.exe'),
-    path.join(process.env['ProgramFiles(x86)'] ?? 'C:/Program Files (x86)', 'SumatraPDF', 'SumatraPDF.exe'),
-    path.join(process.env['LOCALAPPDATA'] ?? '', 'SumatraPDF', 'SumatraPDF.exe'),
-  ].filter(Boolean);
-  return candidates.find((item) => existsSync(item)) ?? null;
-}
 
 /**
  * Dò máy in IPP quảng bá qua mDNS để tự thêm vào CUPS.

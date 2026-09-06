@@ -26,7 +26,27 @@ The setup screen in the web UI (and the `printagent setup` command) checks all o
 
 The procedure is the same on macOS, Windows and Linux.
 
-The quickest way, from npm:
+### Bare machine, no Node yet
+
+A single command. No Node, no git, no admin rights required:
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/huy97/printagent/main/install.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/huy97/printagent/main/install.ps1 | iex
+```
+
+The script downloads a portable Node LTS build (verified against its SHA-256) into `~/.printagent/runtime`, installs the agent from npm, creates a `printagent` command and opens the setup screen. If the machine already has Node >= 20 it uses that one and downloads nothing.
+
+Everything lives under `~/.printagent` (Windows: `%USERPROFILE%\.printagent`); uninstalling means deleting that folder. Re-run the same command to update.
+
+Optional environment variables: `PRINTAGENT_LANG=en` for English output, `PRINTAGENT_NO_START=1` to install without starting, `PRINTAGENT_HOME` to install elsewhere, `PRINTAGENT_NODE_TRACK` to pick another Node line (default `v22.x`).
+
+### Machine that already has Node >= 20
 
 ```bash
 npm install -g @hyydev/printagent
@@ -39,25 +59,13 @@ Run it once without installing:
 npx @hyydev/printagent start
 ```
 
-Or run it from source, on a machine that already has Node >= 20:
+Or run it from source:
 
 ```bash
 git clone https://github.com/huy97/printagent.git
 cd printagent
 yarn install
 yarn start            # the agent starts immediately and opens the setup screen on first run
-```
-
-On a bare machine without Node, use the bootstrap script; it installs Node LTS and then does the rest:
-
-```powershell
-# Windows (PowerShell)
-powershell -ExecutionPolicy Bypass -File install.ps1
-```
-
-```bash
-# macOS / Linux
-bash install.sh
 ```
 
 The web interface always comes up first. On the first run the browser opens straight onto the setup screen: press **Install automatically** once, the steps run in order and the progress shows on screen. The terminal is never needed.
@@ -71,7 +79,7 @@ The installer fixes whatever it can instead of asking the user to install things
 | Print driver | no | Linux: installs `cups cups-client` and starts the service |
 | Printer | no | discovers IPP printers over mDNS (`dns-sd`/`avahi-browse`) and adds them to CUPS |
 | Chromium | no | downloads the Puppeteer build, otherwise installs Google Chrome through brew/winget/apt |
-| SumatraPDF (Windows) | no | installed through winget/choco, written to `printing.sumatraPath` |
+| SumatraPDF (Windows) | no | downloads the portable build into `~/.printagent/tools` (no admin rights), falls back to winget/choco, then writes `printing.sumatraPath` |
 | API key | yes | creates a `default` key |
 | Tunnel | no | installs cloudflared/ngrok when `tunnel.provider` is not `none` |
 | Background service | no | registers the service when chosen |

@@ -106,7 +106,8 @@ export const en = {
   'setup.step.print_tool.found': '{path}',
   'setup.step.print_tool.missing': 'SumatraPDF not found',
   'setup.step.print_tool.installing': 'Installing SumatraPDF...',
-  'setup.step.print_tool.hint': 'PowerShell PrintTo will be used instead (slower, fewer options). Manual install: winget install SumatraPDF.SumatraPDF',
+  'setup.step.print_tool.download_failed': 'Portable download failed, falling back to a package manager...',
+  'setup.step.print_tool.hint': 'Run the automatic setup to download the portable build into the data folder, no admin rights needed. Skip it and the agent falls back to PowerShell PrintTo (slower, fewer options).',
 
   'setup.step.api_key': 'API key',
   'setup.step.api_key.existing': '{count} key(s) already exist',

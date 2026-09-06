@@ -2,6 +2,7 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { run, tryRun, powershell } from '../util/exec.js';
 import { getConfig } from '../core/config.js';
+import { PATHS } from '../core/paths.js';
 
 const STATUS_MAP = {
   0: 'unknown',
@@ -60,11 +61,11 @@ export async function getPrinterOptions(name) {
   }
 }
 
-function findSumatra() {
-  const configured = getConfig().printing.sumatraPath;
+export function findSumatra() {
   const candidates = [
-    configured,
+    getConfig().printing.sumatraPath,
     process.env.SUMATRA_PATH,
+    path.join(PATHS.data, 'tools', 'SumatraPDF.exe'),
     path.join(process.env['ProgramFiles'] ?? 'C:/Program Files', 'SumatraPDF', 'SumatraPDF.exe'),
     path.join(process.env['ProgramFiles(x86)'] ?? 'C:/Program Files (x86)', 'SumatraPDF', 'SumatraPDF.exe'),
     path.join(process.env['LOCALAPPDATA'] ?? '', 'SumatraPDF', 'SumatraPDF.exe'),

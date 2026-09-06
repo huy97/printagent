@@ -26,7 +26,27 @@ Màn hình cài đặt trong web UI (và lệnh `printagent setup`) kiểm tra h
 
 Quy trình giống nhau trên macOS, Windows và Linux.
 
-Cách nhanh nhất, cài từ npm:
+### Máy trắng, chưa có Node
+
+Một lệnh duy nhất. Không cần cài Node, không cần git, không cần quyền admin:
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/huy97/printagent/main/install.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/huy97/printagent/main/install.ps1 | iex
+```
+
+Script tự tải Node LTS bản portable (có đối chiếu SHA-256) vào `~/.printagent/runtime`, cài agent từ npm, tạo lệnh `printagent` rồi mở luôn màn hình cài đặt. Máy đã có Node >= 20 thì nó dùng luôn bản đó, không tải thêm.
+
+Mọi thứ nằm gọn trong `~/.printagent` (Windows: `%USERPROFILE%\.printagent`); gỡ cài đặt là xoá thư mục đó. Chạy lại chính lệnh trên để cập nhật.
+
+Biến môi trường tuỳ chọn: `PRINTAGENT_LANG=en` cho thông báo tiếng Anh, `PRINTAGENT_NO_START=1` để cài xong không chạy ngay, `PRINTAGENT_HOME` để đổi thư mục cài, `PRINTAGENT_NODE_TRACK` để chọn nhánh Node khác (mặc định `v22.x`).
+
+### Máy đã có Node >= 20
 
 ```bash
 npm install -g @hyydev/printagent
@@ -39,25 +59,13 @@ Chạy một lần không cài đặt:
 npx @hyydev/printagent start
 ```
 
-Hoặc chạy từ mã nguồn, máy đã có Node >= 20:
+Hoặc chạy từ mã nguồn:
 
 ```bash
 git clone https://github.com/huy97/printagent.git
 cd printagent
 yarn install
 yarn start            # agent chạy ngay, lần đầu tự mở giao diện cài đặt
-```
-
-Máy trắng chưa có Node thì dùng script bootstrap, nó tự cài Node LTS rồi làm nốt phần trên:
-
-```powershell
-# Windows (PowerShell)
-powershell -ExecutionPolicy Bypass -File install.ps1
-```
-
-```bash
-# macOS / Linux
-bash install.sh
 ```
 
 Giao diện web luôn lên trước. Lần đầu chạy, trình duyệt mở thẳng màn hình cài đặt: bấm **Cài đặt tự động** một lần, các bước chạy tuần tự và hiện tiến độ ngay trên màn hình. Không cần đụng tới terminal.
@@ -71,7 +79,7 @@ Trình cài đặt tự sửa những gì sửa được, không bắt người 
 | Driver in | không | Linux: cài `cups cups-client` rồi bật dịch vụ |
 | Máy in | không | dò máy in IPP qua mDNS (`dns-sd`/`avahi-browse`) và tự thêm vào CUPS |
 | Chromium | không | tải bản Puppeteer, không được thì cài Google Chrome qua brew/winget/apt |
-| SumatraPDF (Windows) | không | cài qua winget/choco, ghi vào `printing.sumatraPath` |
+| SumatraPDF (Windows) | không | tải bản portable về `~/.printagent/tools` (không cần admin), lỗi thì thử winget/choco, rồi ghi vào `printing.sumatraPath` |
 | API key | có | tự tạo khoá `default` |
 | Tunnel | không | cài cloudflared/ngrok nếu `tunnel.provider` khác `none` |
 | Chạy nền | không | đăng ký dịch vụ nếu chọn |

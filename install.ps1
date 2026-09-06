@@ -1,56 +1,178 @@
-﻿# Cài đặt PrintAgent trên Windows: tự cài Node LTS nếu thiếu rồi khởi động agent.
-# Chạy: powershell -ExecutionPolicy Bypass -File install.ps1
+# Cài PrintAgent trên Windows từ máy trắng: tự tải Node portable nếu thiếu,
+# cài package từ npm rồi khởi động agent. Không cần quyền admin, winget hay git.
+#
+#   irm https://raw.githubusercontent.com/huy97/printagent/main/install.ps1 | iex
+#
+# Biến môi trường: PRINTAGENT_LANG=en, PRINTAGENT_NODE_TRACK=v22.x,
+# PRINTAGENT_HOME=%USERPROFILE%\.printagent, PRINTAGENT_NO_START=1
 
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$ProgressPreference = 'SilentlyContinue'
 
-function Get-NodeMajor {
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return 0 }
+$minMajor = 20
+$track = if ($env:PRINTAGENT_NODE_TRACK) { $env:PRINTAGENT_NODE_TRACK } else { 'v22.x' }
+$package = if ($env:PRINTAGENT_PACKAGE) { $env:PRINTAGENT_PACKAGE } else { '@hyydev/printagent' }
+$paHome = if ($env:PRINTAGENT_HOME) { $env:PRINTAGENT_HOME } else { Join-Path $env:USERPROFILE '.printagent' }
+$runtimeDir = Join-Path $paHome 'runtime'
+$appDir = Join-Path $paHome 'app'
+$binDir = Join-Path $paHome 'bin'
+$isEnglish = ($env:PRINTAGENT_LANG -and $env:PRINTAGENT_LANG.StartsWith('en'))
+
+function Say($vi, $en, $color = 'Cyan') {
+    Write-Host $(if ($isEnglish) { $en } else { $vi }) -ForegroundColor $color
+}
+
+function Fail($vi, $en) {
+    throw $(if ($isEnglish) { $en } else { $vi })
+}
+
+function Get-NodeMajor($exe) {
+    try { return [int]((& $exe -v).TrimStart('v').Split('.')[0]) } catch { return 0 }
+}
+
+function Get-NodeArch {
+    switch ($env:PROCESSOR_ARCHITECTURE) {
+        'ARM64' { return 'arm64' }
+        'AMD64' { return 'x64' }
+        'x86' { if ([Environment]::Is64BitOperatingSystem) { return 'x64' } else { return 'x86' } }
+        default { return 'x64' }
+    }
+}
+
+# Node portable đã tải lần trước thì dùng lại.
+function Find-RuntimeNode {
+    if (-not (Test-Path $runtimeDir)) { return $null }
+    Get-ChildItem $runtimeDir -Directory -Filter 'node-*' -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName 'node.exe' } |
+        Where-Object { (Test-Path $_) -and ((Get-NodeMajor $_) -ge $minMajor) } |
+        Select-Object -First 1
+}
+
+function Install-Node {
+    $arch = Get-NodeArch
+    Say "Chưa có Node.js $minMajor trở lên, đang tải bản portable cho win-$arch..." `
+        "Node.js $minMajor+ not found, downloading a portable build for win-$arch..." 'Yellow'
+
+    $dist = "https://nodejs.org/dist/latest-$track"
+    New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
+
     try {
-        return [int]((& node -v).TrimStart('v').Split('.')[0])
+        $shasums = (Invoke-WebRequest -UseBasicParsing "$dist/SHASUMS256.txt").Content
     } catch {
-        return 0
+        Fail 'Không tải được danh sách bản Node. Kiểm tra kết nối mạng rồi chạy lại.' `
+             'Could not fetch the Node release list. Check your network and re-run.'
+    }
+
+    $line = ($shasums -split "`n" | Where-Object { $_ -match "node-v[\d.]+-win-$arch\.zip$" } | Select-Object -First 1)
+    if (-not $line) { Fail "Không tìm thấy bản Node cho win-$arch." "No Node build available for win-$arch." }
+    $parts = $line.Trim() -split '\s+'
+    $expected = $parts[0]
+    $file = $parts[-1]
+
+    $archive = Join-Path $runtimeDir $file
+    Invoke-WebRequest -UseBasicParsing "$dist/$file" -OutFile $archive
+
+    $actual = (Get-FileHash $archive -Algorithm SHA256).Hash
+    if ($actual -ne $expected.ToUpper()) {
+        Remove-Item $archive -Force
+        Fail 'Bản Node tải về sai checksum, đã xoá. Chạy lại lệnh cài đặt.' `
+             'Checksum mismatch on the downloaded Node build; removed. Please re-run.'
+    }
+
+    Expand-Archive -Path $archive -DestinationPath $runtimeDir -Force
+    Remove-Item $archive -Force
+    $exe = Join-Path (Join-Path $runtimeDir ($file -replace '\.zip$', '')) 'node.exe'
+    if (-not (Test-Path $exe)) { Fail 'Giải nén Node thất bại.' 'Extracting Node failed.' }
+    return $exe
+}
+
+Say 'PrintAgent - đang chuẩn bị môi trường' 'PrintAgent - preparing your environment'
+
+$node = $null
+$systemNode = Get-Command node -ErrorAction SilentlyContinue
+if ($systemNode -and (Get-NodeMajor $systemNode.Source) -ge $minMajor) {
+    $node = $systemNode.Source
+} else {
+    $node = Find-RuntimeNode
+    if (-not $node) { $node = Install-Node }
+}
+
+$nodeHome = Split-Path -Parent $node
+$npmCli = Join-Path $nodeHome 'node_modules\npm\bin\npm-cli.js'
+if (-not (Test-Path $npmCli)) {
+    $npmCli = Join-Path $nodeHome 'lib\node_modules\npm\bin\npm-cli.js'
+}
+if (-not (Test-Path $npmCli)) {
+    Fail 'Bản Node đang dùng không kèm npm. Cài lại Node LTS rồi chạy lại.' `
+         'This Node build has no npm. Reinstall Node LTS and re-run.'
+}
+
+# Script postinstall của dependencies (puppeteer) gọi thẳng lệnh `node`, nên Node
+# portable phải nằm trong PATH chứ không chỉ được gọi bằng đường dẫn tuyệt đối.
+$env:Path = "$nodeHome;$env:Path"
+
+Say "Node $(& $node -v) sẵn sàng" "Node $(& $node -v) ready" 'Green'
+
+# Chạy từ mã nguồn đã tải về thì cài dependencies tại chỗ, không lấy bản trên npm.
+$repoRoot = $null
+if ($PSCommandPath -and (Test-Path $PSCommandPath)) {
+    $candidate = Split-Path -Parent $PSCommandPath
+    if (Test-Path (Join-Path $candidate 'package.json')) {
+        if ((Get-Content (Join-Path $candidate 'package.json') -Raw) -match '"name":\s*"@hyydev/printagent"') {
+            $repoRoot = $candidate
+        }
     }
 }
 
-function Sync-Path {
-    $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-    $user = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $env:Path = "$machine;$user"
+if ($repoRoot) {
+    Say 'Đang cài thư viện từ mã nguồn (có thể mất vài phút, gồm cả Chromium)...' `
+        'Installing dependencies from source (may take a few minutes, includes Chromium)...'
+    Push-Location $repoRoot
+    # --no-package-lock: dự án dùng yarn.lock, không để npm sinh thêm lockfile thứ hai.
+    try { & $node $npmCli install --no-audit --no-fund --no-package-lock } finally { Pop-Location }
+    $entry = Join-Path $repoRoot 'bin\printagent.js'
+} else {
+    Say "Đang cài $package (có thể mất vài phút, gồm cả Chromium)..." `
+        "Installing $package (may take a few minutes, includes Chromium)..."
+    New-Item -ItemType Directory -Force -Path $appDir | Out-Null
+    & $node $npmCli install -g --prefix $appDir --no-audit --no-fund $package
+    if ($LASTEXITCODE -ne 0) {
+        Fail 'Cài package thất bại. Xem thông báo lỗi phía trên rồi chạy lại.' `
+             'Package install failed. Check the error above and re-run.'
+    }
+    $entry = Join-Path $appDir 'node_modules\@hyydev\printagent\bin\printagent.js'
 }
 
-Write-Host 'PrintAgent - đang chuẩn bị môi trường' -ForegroundColor Cyan
-
-if ((Get-NodeMajor) -lt 20) {
-    Write-Host 'Chưa có Node.js 20 trở lên, đang cài...' -ForegroundColor Yellow
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        winget install -e --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
-    } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
-        choco install -y nodejs-lts
-    } else {
-        Start-Process 'https://nodejs.org/en/download'
-        throw 'Máy chưa có winget lẫn choco. Cài Node LTS từ trang vừa mở rồi chạy lại install.ps1.'
-    }
-    Sync-Path
-    if ((Get-NodeMajor) -lt 20) {
-        throw 'Đã cài Node nhưng cửa sổ này chưa nhận. Đóng PowerShell, mở lại rồi chạy lại install.ps1.'
-    }
+if (-not (Test-Path $entry)) {
+    Fail 'Không tìm thấy file khởi chạy sau khi cài.' 'Entry script missing after install.'
 }
 
-Write-Host "Node $(node -v) sẵn sàng" -ForegroundColor Green
+New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+$launcher = Join-Path $binDir 'printagent.cmd'
+@"
+@echo off
+rem Launcher do install.ps1 sinh ra: khoá đúng Node đã dùng lúc cài.
+"$node" "$entry" %*
+"@ | Set-Content -Path $launcher -Encoding ASCII
 
-Push-Location $root
-try {
-    if (Get-Command yarn -ErrorAction SilentlyContinue) {
-        yarn install
-    } else {
-        npm install
-    }
-    if ($LASTEXITCODE -ne 0) { throw 'Cài dependencies thất bại.' }
-
-    Write-Host 'Đang khởi động agent, trình duyệt sẽ tự mở màn hình cài đặt...' -ForegroundColor Cyan
-    node bin/printagent.js start
-} finally {
-    Pop-Location
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if (($userPath -split ';') -notcontains $binDir) {
+    [Environment]::SetEnvironmentVariable('Path', "$userPath;$binDir", 'User')
+    Say "Đã thêm $binDir vào PATH. Mở cửa sổ dòng lệnh mới để gọi lệnh printagent." `
+        "Added $binDir to PATH. Open a new terminal to use the printagent command." 'Green'
+} else {
+    Say 'Đã cài lệnh: printagent' 'Command installed: printagent' 'Green'
 }
+$env:Path = "$env:Path;$binDir"
+
+if ($env:PRINTAGENT_NO_START -eq '1') {
+    Say "Bỏ qua bước khởi động theo yêu cầu. Chạy: $launcher start" `
+        "Skipping startup as requested. Run: $launcher start"
+    return
+}
+
+Say 'Đang khởi động agent, trình duyệt sẽ tự mở màn hình cài đặt...' `
+    'Starting the agent, your browser will open the setup screen...'
+& $node $entry start
