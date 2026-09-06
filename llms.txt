@@ -9,7 +9,7 @@ Agent tự mô tả mình qua ba địa chỉ không cần API key:
 | Địa chỉ | Nội dung |
 | --- | --- |
 | `GET /.well-known/printagent.json` | Điểm khám phá: phiên bản, nơi đọc tài liệu, ba điểm truy cập, cách xác thực |
-| `GET /openapi.json` | Đặc tả OpenAPI 3.1 của cả 34 endpoint REST, dùng để sinh client hoặc nạp làm tool |
+| `GET /openapi.json` | Đặc tả OpenAPI 3.1 của cả 36 endpoint REST, dùng để sinh client hoặc nạp làm tool |
 | `GET /llms.txt` | Chính file này |
 
 Trình tự tích hợp gợi ý: đọc `/.well-known/printagent.json` → `GET /api/printers` lấy tên máy in → `GET /api/templates/:id` đọc `sampleData` để biết khuôn dữ liệu → `POST /api/print/template`.
@@ -55,7 +55,9 @@ Truyền template inline thay cho `templateId`: `{ "template": "<h1>{{code}}</h1
 
 Engine Handlebars, hai kiểu: `html` (render thành PDF bằng Chromium) và `text` (gửi raw ESC/POS tới máy in nhiệt).
 
-Mẫu tạo sẵn:
+Mẫu tạo sẵn **không tự tạo khi cài**: người dùng phải đồng ý ở màn cài đặt, hoặc gọi `POST /api/templates/seed` với `{"locale":"vi"}` / `{"locale":"en"}`. Đó là lý do `GET /api/templates` có thể trả về rỗng. `GET /api/templates/seeds?lang=en` liệt kê một bộ mà không tạo gì.
+
+Bộ tiếng Việt:
 
 | Id | Khổ | Dùng cho |
 | --- | --- | --- |
@@ -66,9 +68,20 @@ Mẫu tạo sẵn:
 | `pos-invoice-80mm` | 80mm | Hoá đơn điện tử khởi tạo từ máy tính tiền |
 | `cash-receipt-a5` | A5 | Phiếu thu tiền mặt mẫu 01-TT |
 
-Lấy cấu trúc dữ liệu của một mẫu bằng `GET /api/templates/:id` rồi đọc `sampleData` — đó là khuôn payload đúng cho `data`.
+Bộ tiếng Anh (USD, định dạng `en-US`):
 
-Helper: `currency`, `formatNumber`, `formatDate`, `vndWords` (đọc số tiền thành chữ tiếng Việt), `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (căn nhãn trái - số phải theo số cột), `ascii` (bỏ dấu tiếng Việt cho máy in nhiệt), `json`, `qr`, `qrDataUri`.
+| Id | Khổ | Dùng cho |
+| --- | --- | --- |
+| `invoice-a4-en` | A4 | Sales invoice |
+| `bill-80mm-en` | 80mm | Thermal receipt qua PDF |
+| `receipt-escpos-en` | raw | ESC/POS receipt, text thuần |
+| `tax-invoice-a4-en` | A4 | Tax invoice, VAT hai bên, thuế suất theo dòng |
+| `pos-receipt-80mm-en` | 80mm | POS tax receipt, có tiền thối |
+| `cash-receipt-a5-en` | A5 | Cash receipt, 5 ô chữ ký |
+
+Lấy cấu trúc dữ liệu của một mẫu bằng `GET /api/templates/:id` rồi đọc `sampleData` — đó là khuôn payload đúng cho `data`. Hai bộ có khuôn dữ liệu khác nhau, đừng dùng lẫn.
+
+Helper: `currency`, `formatNumber`, `formatDate`, `vndWords` (đọc số tiền thành chữ tiếng Việt), `enWords` (tiếng Anh, kèm tên đơn vị tiền), `amountWords` (chọn theo `locale=`), `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (căn nhãn trái - số phải theo số cột), `ascii` (bỏ dấu tiếng Việt cho máy in nhiệt), `json`, `qr`, `qrDataUri`.
 
 Cấu hình trang: `page.format`, `page.width`/`page.height`, `page.landscape`, `page.marginTop|marginRight|marginBottom|marginLeft`. Với giấy cuộn đặt `page.height = "auto"` để cắt theo chiều cao nội dung.
 
@@ -139,6 +152,8 @@ Ngôn ngữ của log, CLI và màn cài đặt trong terminal lấy theo biến
 | POST | `/api/printers/:name/default` | Đặt máy in mặc định |
 | POST | `/api/printers/:name/test` | In trang thử |
 | GET/POST | `/api/templates` | Danh sách / tạo template |
+| GET | `/api/templates/seeds` | Liệt kê bộ mẫu có sẵn (`?lang=vi\|en`) |
+| POST | `/api/templates/seed` | Tạo bộ mẫu của một ngôn ngữ |
 | GET/PUT/DELETE | `/api/templates/:id` | Xem / sửa / xoá template |
 | POST | `/api/templates/:id/preview` | Render template thành PDF |
 | GET | `/api/jobs` | Danh sách job (`?status=`, `?limit=`) |

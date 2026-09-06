@@ -51,6 +51,7 @@ async function main() {
     case 'setup': {
       const result = await runSetupCli({
         enableService: flag('service') === true ? true : flag('no-service') ? false : undefined,
+        seedTemplates: flag('templates') === true ? true : flag('no-templates') ? false : undefined,
         autoFix: !flag('no-download'),
       });
       process.exit(result.ok ? 0 : 1);

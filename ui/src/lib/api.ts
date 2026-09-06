@@ -188,6 +188,13 @@ export interface SetupProgress {
   service?: ServiceStatus | null
 }
 
+export interface SeedTemplate {
+  id: string
+  name: string
+  description: string
+  engine: 'html' | 'text'
+}
+
 export interface SetupState {
   complete: boolean
   version: number
@@ -199,6 +206,7 @@ export interface SetupState {
   steps: SetupStep[]
   plan: SetupPlanStep[]
   service: ServiceStatus
+  templates: { count: number; catalog: SeedTemplate[] }
 }
 
 export interface LogEntry {
@@ -325,7 +333,7 @@ export const api = {
     request<{ deleted: boolean }>(`/api/apikeys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   setup: () => request<SetupState>('/api/setup'),
-  runSetup: (body: { enableService?: boolean; autoFix?: boolean }) =>
+  runSetup: (body: { enableService?: boolean; seedTemplates?: boolean; locale?: string; autoFix?: boolean }) =>
     request<SetupProgress>(
       '/api/setup/run',
       { method: 'POST', body },
@@ -333,6 +341,13 @@ export const api = {
   setupProgress: () => request<SetupProgress>('/api/setup/progress'),
   setupService: (action: 'install' | 'uninstall') =>
     request<ServiceStatus>('/api/setup/service', { method: 'POST', body: { action } }),
+
+  templateSeeds: (locale: string) => request<{ locale: string; seeds: SeedTemplate[] }>(`/api/templates/seeds?lang=${locale}`),
+  seedTemplates: (locale: string) =>
+    request<{ locale: string; created: number; skipped: number; total: number }>('/api/templates/seed', {
+      method: 'POST',
+      body: { locale },
+    }),
 
   tunnel: () => request<TunnelInfo>('/api/tunnel'),
   startTunnel: (provider: string) => request<TunnelStatus>('/api/tunnel/start', { method: 'POST', body: { provider } }),
@@ -343,7 +358,7 @@ export const api = {
  * Chạy cài đặt rồi hỏi tiến độ tới khi xong, vì các bước có thể tải Chromium hoặc Node.
  */
 export async function runSetupUntilDone(
-  body: { enableService?: boolean; autoFix?: boolean },
+  body: { enableService?: boolean; seedTemplates?: boolean; locale?: string; autoFix?: boolean },
   onProgress?: (progress: SetupProgress) => void,
 ): Promise<SetupProgress> {
   let progress = await api.runSetup(body)

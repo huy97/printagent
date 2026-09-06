@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { ExternalLink, FileText, Plus, Printer, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { ExternalLink, FileText, Plus, Printer, RefreshCw, Save, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Field } from '@/components/field'
 import { useConfirm } from '@/components/confirm-dialog'
 import { useAgent, reportError } from '@/hooks/use-agent'
-import { useT, type Translate } from '@/i18n'
+import { useI18n, useT, type Translate } from '@/i18n'
 import { api, type Template } from '@/lib/api'
 import { formatTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -40,6 +40,7 @@ export function TemplatesTab() {
   const t = useT()
   const blank = newTemplate(t)
   const { templates, refreshTemplates, refreshJobs, printers } = useAgent()
+  const { locale } = useI18n()
   const { confirm, dialog } = useConfirm()
   const [current, setCurrent] = useState<Template>(blank)
   const [saved, setSaved] = useState<Template | null>(null)
@@ -50,6 +51,7 @@ export function TemplatesTab() {
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [seeding, setSeeding] = useState(false)
 
   useEffect(() => {
     if (!current.id && templates.length > 0) void select(templates[0].id)
@@ -207,13 +209,32 @@ export function TemplatesTab() {
     })
   }
 
+  const seed = async () => {
+    setSeeding(true)
+    try {
+      const result = await api.seedTemplates(locale)
+      await refreshTemplates()
+      if (result.created > 0) toast.success(t('templates.seed_done', { count: result.created }))
+      else toast.info(t('templates.seed_none'))
+    } catch (error) {
+      reportError(error)
+    } finally {
+      setSeeding(false)
+    }
+  }
+
   return (
     <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[300px_minmax(0,1fr)] 3xl:min-h-0 3xl:flex-1 3xl:grid-cols-[300px_minmax(0,1fr)_minmax(400px,520px)]">
       {dialog}
       <Card className="h-fit 3xl:h-auto 3xl:min-h-0">
         <CardHeader>
           <CardTitle>{t('nav.templates')}</CardTitle>
-          <CardAction>
+          <CardAction className="flex gap-2">
+            {templates.length > 0 ? (
+              <Button size="sm" variant="ghost" disabled={seeding} onClick={() => void seed()} title={t('templates.seed_hint')}>
+                <Sparkles /> {t('templates.seed_short')}
+              </Button>
+            ) : null}
             <Button
               size="sm"
               onClick={() => leaveDraft(resetToBlank)}
@@ -247,7 +268,14 @@ export function TemplatesTab() {
                   </div>
                 </button>
               ))}
-              {templates.length === 0 ? <p className="text-sm text-muted-foreground">{t('templates.empty')}</p> : null}
+              {templates.length === 0 ? (
+                <div className="flex flex-col items-start gap-3 py-2">
+                  <p className="text-sm text-muted-foreground">{t('templates.empty')}</p>
+                  <Button size="sm" variant="outline" disabled={seeding} onClick={() => void seed()}>
+                    <Sparkles /> {t('templates.seed')}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </ScrollArea>
         </CardContent>

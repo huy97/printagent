@@ -50,6 +50,11 @@ export function rememberServiceChoice(enableService) {
   return writeSetupState({ ...state, enableService: Boolean(enableService) });
 }
 
+export function rememberTemplateChoice(seedTemplates) {
+  const state = readSetupState();
+  return writeSetupState({ ...state, seedTemplates: Boolean(seedTemplates) });
+}
+
 export function isSetupComplete() {
   const state = readSetupState();
   return state.version >= SETUP_VERSION && Boolean(state.completedAt);
@@ -62,13 +67,21 @@ export function isSetupComplete() {
  * Chạy tuần tự các bước. Bước lỗi sẽ được tự sửa nếu có cách; chỉ dừng khi
  * một bước bắt buộc vẫn hỏng sau khi đã thử sửa.
  */
-export async function runSetup({ enableService = false, autoFix = true, allowRestart = false, onStep, onLog } = {}) {
+export async function runSetup({
+  enableService = false,
+  seedTemplates = false,
+  locale = null,
+  autoFix = true,
+  allowRestart = false,
+  onStep,
+  onLog,
+} = {}) {
   const results = [];
   let failed = null;
 
   for (const step of STEPS) {
     onStep?.({ phase: 'start', id: step.id, titleKey: step.titleKey });
-    const context = { enableService, autoFix, allowRestart, log: onLog };
+    const context = { enableService, seedTemplates, locale, autoFix, allowRestart, log: onLog };
     let result = await safeCheck(step, context);
 
     if (result.status === 'error' && autoFix && step.fix) {
@@ -170,7 +183,7 @@ export function getSetupProgress(locale) {
  * Chạy wizard trong nền và ghi tiến độ để web UI hỏi lại bằng polling.
  * Gọi lại khi đang chạy sẽ chỉ trả về tiến độ hiện tại.
  */
-export function startSetupRun({ enableService = false, autoFix = true } = {}) {
+export function startSetupRun({ enableService = false, seedTemplates = false, locale = null, autoFix = true } = {}) {
   if (progress.running) return getSetupProgress();
 
   progress = { ...idleProgress(), running: true, startedAt: new Date().toISOString() };
@@ -182,6 +195,8 @@ export function startSetupRun({ enableService = false, autoFix = true } = {}) {
 
   runSetup({
     enableService,
+    seedTemplates,
+    locale,
     autoFix,
     onLog: push,
     onStep: (event) => {

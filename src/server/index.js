@@ -19,7 +19,6 @@ import * as printers from '../printers/index.js';
 import * as jobs from '../core/jobs.js';
 import { autoStartTunnel, stopTunnel } from '../core/tunnel.js';
 import { closeBrowser } from '../render/pdf.js';
-import { seedTemplates } from '../render/seed.js';
 import { AppError } from '../util/errors.js';
 import { t, localeFromRequest, setLocale, LOCALES } from '../i18n/index.js';
 
@@ -161,7 +160,6 @@ export async function startServer({ port, host } = {}) {
 
   jobs.loadJobs();
   jobs.cleanupFiles();
-  seedTemplates();
 
   const app = createApp();
   const server = http.createServer(app);

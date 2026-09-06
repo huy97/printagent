@@ -9,6 +9,8 @@ import { apiKeyValue, shortId } from '../util/id.js';
 import { tryRun } from '../util/exec.js';
 import * as printers from '../printers/index.js';
 import { renderHealth, findSystemChrome } from '../render/pdf.js';
+import { listTemplates } from '../render/templates.js';
+import { seedTemplates } from '../render/seed.js';
 import { detectBinaries } from '../core/tunnel.js';
 import { serviceStatus, installService, entryScript } from './service.js';
 import { hasCommand, runVisible, runBash, installPackage, detectPackageManager, sudo } from './tools.js';
@@ -352,6 +354,23 @@ const STEP_LIST = [
       return result.ok;
     },
     hintKey: 'setup.step.tunnel_tools.hint',
+  },
+  {
+    id: 'templates',
+    titleKey: 'setup.step.templates',
+    required: false,
+    async check({ seedTemplates: wanted, locale } = {}) {
+      const existing = listTemplates().length;
+      if (!wanted) {
+        if (existing > 0) return ok('setup.step.templates.kept', { count: existing });
+        return warn('setup.step.templates.skipped', null, 'setup.step.templates.skipped_hint');
+      }
+      const result = seedTemplates({ locale: locale ?? getConfig().agent.locale });
+      if (result.created > 0) {
+        return ok('setup.step.templates.created', { count: result.created, total: result.total });
+      }
+      return ok('setup.step.templates.exists', { count: result.total });
+    },
   },
   {
     id: 'service',

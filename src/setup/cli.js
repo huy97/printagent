@@ -1,8 +1,8 @@
 import process from 'node:process';
 import readline from 'node:readline/promises';
-import { runSetup, readSetupState, rememberServiceChoice, localizeStep } from './index.js';
-import { t } from '../i18n/index.js';
-import { getConfig } from '../core/config.js';
+import { runSetup, readSetupState, rememberServiceChoice, rememberTemplateChoice, localizeStep } from './index.js';
+import { t, LOCALES, getLocale, setLocale } from '../i18n/index.js';
+import { getConfig, updateConfig } from '../core/config.js';
 import { configureLogger } from '../util/logger.js';
 
 const ICON = { ok: '[ok]', warn: '[!]', error: '[x]' };
@@ -15,6 +15,31 @@ async function confirm(question, fallback = true, nonInteractive = false) {
     const answer = (await rl.question(`${question} ${fallback ? '[Y/n]' : '[y/N]'} `)).trim().toLowerCase();
     if (!answer) return fallback;
     return answer === 'y' || answer === 'yes' || answer === 'c' || answer === 'co';
+  } catch {
+    // Ctrl+D hoặc stdin đóng giữa chừng: dùng mặc định thay vì dừng cả wizard.
+    return fallback;
+  } finally {
+    rl.close();
+  }
+}
+
+const LOCALE_LABEL = { vi: 'Tiếng Việt', en: 'English' };
+
+async function askLocale() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return getLocale();
+  const current = getLocale();
+  const options = LOCALES.map((code, index) => `${index + 1}) ${LOCALE_LABEL[code] ?? code}`).join('   ');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await rl.question(`${t('cli.setup.ask_locale')} ${options} [${LOCALES.indexOf(current) + 1}] `))
+      .trim()
+      .toLowerCase();
+    if (!answer) return current;
+    const byIndex = LOCALES[Number(answer) - 1];
+    const byCode = LOCALES.find((code) => code === answer.slice(0, 2));
+    return byIndex ?? byCode ?? current;
+  } catch {
+    return current;
   } finally {
     rl.close();
   }
@@ -23,8 +48,18 @@ async function confirm(question, fallback = true, nonInteractive = false) {
 /**
  * Wizard chạy trong terminal: tuần tự, dừng ngay khi có bước lỗi.
  */
-export async function runSetupCli({ enableService, autoFix = true, quiet = false, ask = true } = {}) {
+export async function runSetupCli({ enableService, seedTemplates, autoFix = true, quiet = false, ask = true } = {}) {
   if (!quiet) console.log(`${t('cli.setup.title')}\n`);
+
+  if (ask && process.stdin.isTTY) {
+    const chosen = await askLocale();
+    if (chosen !== getLocale()) {
+      setLocale(chosen);
+      updateConfig({ agent: { locale: chosen } });
+      console.log(`${t('cli.setup.locale_set', { language: LOCALE_LABEL[chosen] ?? chosen })}\n`);
+    }
+  }
+
   configureLogger({ silent: true });
 
   let useService = enableService;
@@ -39,8 +74,21 @@ export async function runSetupCli({ enableService, autoFix = true, quiet = false
     }
   }
 
+  let useTemplates = seedTemplates;
+  if (useTemplates === undefined) {
+    const remembered = readSetupState().seedTemplates;
+    if (typeof remembered === 'boolean' || !ask) {
+      useTemplates = remembered ?? false;
+    } else {
+      useTemplates = await confirm(t('cli.setup.ask_templates', { count: 6 }), true, false);
+      if (process.stdin.isTTY) rememberTemplateChoice(useTemplates);
+    }
+  }
+
   const result = await runSetup({
     enableService: useService,
+    seedTemplates: useTemplates,
+    locale: getLocale(),
     autoFix,
     allowRestart: true,
     onLog: (message) => console.log(`      ${message}`),

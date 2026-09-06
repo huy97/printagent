@@ -7,8 +7,26 @@ import {
   deleteTemplate,
 } from '../../render/templates.js';
 import { previewTemplate } from '../../core/printService.js';
+import { seedTemplates, seedCatalog } from '../../render/seed.js';
+import { getConfig } from '../../core/config.js';
+import { localeFromRequest, LOCALES } from '../../i18n/index.js';
 
 export const templatesRouter = Router();
+
+templatesRouter.get('/seeds', (req, res) => {
+  const locale = LOCALES.includes(req.query.lang) ? req.query.lang : localeFromRequest(req);
+  res.json({ locale, seeds: seedCatalog(locale) });
+});
+
+templatesRouter.post('/seed', (req, res, next) => {
+  try {
+    const locale = LOCALES.includes(req.body?.locale) ? req.body.locale : getConfig().agent.locale;
+    // force: bộ mẫu ngôn ngữ khác vẫn tạo được sau khi màn cài đặt đã chạy một lần.
+    res.status(201).json({ locale, ...seedTemplates({ locale, force: true }) });
+  } catch (error) {
+    next(error);
+  }
+});
 
 templatesRouter.get('/', (req, res) => {
   res.json({ templates: listTemplates() });

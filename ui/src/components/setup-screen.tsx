@@ -17,7 +17,7 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { reportError } from '@/hooks/use-agent'
 import { LocaleSwitch } from '@/components/locale-switch'
-import { useT, type MessageKey } from '@/i18n'
+import { useI18n, useT, type MessageKey } from '@/i18n'
 import { api, runSetupUntilDone, type SetupProgress, type SetupState, type SetupStep } from '@/lib/api'
 import { CopyButton } from '@/components/copy-button'
 import { cn } from '@/lib/utils'
@@ -152,8 +152,10 @@ function buildRows(state: SetupState, progress: SetupProgress | null): Row[] {
 
 export function SetupScreen({ state, onDone }: { state: SetupState; onDone: () => void }) {
   const t = useT()
+  const { locale } = useI18n()
   const [progress, setProgress] = useState<SetupProgress | null>(null)
   const [enableService, setEnableService] = useState(!state.service.installed)
+  const [seedTemplates, setSeedTemplates] = useState(state.templates.count === 0)
   const [running, setRunning] = useState(false)
 
   useEffect(() => {
@@ -191,7 +193,7 @@ export function SetupScreen({ state, onDone }: { state: SetupState; onDone: () =
   const run = async () => {
     setRunning(true)
     try {
-      const result = await runSetupUntilDone({ enableService }, setProgress)
+      const result = await runSetupUntilDone({ enableService, seedTemplates, locale }, setProgress)
       if (result.ok) toast.success(t('setup.done_toast'))
       else toast.error(t('settings.setup_stopped', { step: result.failed?.title ?? '' }))
     } catch (error) {
@@ -289,7 +291,7 @@ export function SetupScreen({ state, onDone }: { state: SetupState; onDone: () =
           </p>
         ) : null}
 
-        <div className="mt-9 flex flex-wrap items-center gap-4 border-t pt-5">
+        <div className="mt-9 flex flex-wrap items-center gap-x-8 gap-y-4 border-t pt-5">
           <div className="flex items-center gap-3">
             <Switch
               id="enable-service"
@@ -302,6 +304,25 @@ export function SetupScreen({ state, onDone }: { state: SetupState; onDone: () =
                 {t('setup.service_label')}
               </Label>
               <span className="text-muted-foreground text-xs">{t('setup.service_hint')}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Switch
+              id="seed-templates"
+              checked={seedTemplates}
+              disabled={running}
+              onCheckedChange={setSeedTemplates}
+            />
+            <div className="flex flex-col gap-0.5">
+              <Label htmlFor="seed-templates" className="text-[13px] font-medium">
+                {t('setup.templates_label', { count: state.templates.catalog.length })}
+              </Label>
+              <span className="text-muted-foreground text-xs">
+                {state.templates.count > 0
+                  ? t('setup.templates_existing', { count: state.templates.count })
+                  : t('setup.templates_hint')}
+              </span>
             </div>
           </div>
 

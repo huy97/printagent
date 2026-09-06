@@ -144,6 +144,14 @@ export const vi = {
   'setup.step.service.skipped': 'Chưa đăng ký chạy nền',
   'setup.step.service.skipped_hint': 'Bật bất cứ lúc nào: printagent service install',
   'setup.step.service.ok': '{manager}: {unit}',
+  'setup.step.templates': 'Bộ template mẫu',
+  'setup.step.templates.created': 'Đã tạo {count}/{total} mẫu',
+  'setup.step.templates.exists': 'Đã có sẵn {count} mẫu',
+  'setup.step.templates.kept': 'Giữ nguyên {count} template đang có',
+  'setup.step.templates.skipped': 'Bỏ qua theo lựa chọn',
+  'setup.step.templates.skipped_hint': 'Tạo sau ở tab Template, hoặc chạy: printagent setup --templates',
+  'templates.seed_created': 'Đã tạo {count} template mẫu',
+  'templates.seed_failed': 'Không tạo được template mẫu {id}: {message}',
 
   'setup.runner': 'Cài đặt',
   'setup.fix_failed': 'Tự cài thất bại: {message}',
@@ -154,6 +162,9 @@ export const vi = {
 
   'cli.setup.title': 'PrintAgent - cài đặt ban đầu',
   'cli.setup.ask_service': 'Đăng ký agent tự chạy nền khi khởi động máy?',
+  'cli.setup.ask_locale': 'Chọn ngôn ngữ / Choose language:',
+  'cli.setup.locale_set': 'Ngôn ngữ: {language}',
+  'cli.setup.ask_templates': 'Tạo {count} template mẫu (hoá đơn, bill, phiếu thu)?',
   'cli.setup.fixing': 'đang tự cài',
   'cli.setup.stopped': 'Dừng ở bước "{title}".',
   'cli.setup.fix_hint': 'Cách khắc phục: {hint}',
@@ -171,7 +182,8 @@ export const vi = {
   'cli.tagline': 'PrintAgent - agent in ấn cục bộ',
   'cli.usage': `Cách dùng:
   printagent start [--port 7788] [--host 0.0.0.0] [--no-open]  Chạy agent, lần đầu tự mở giao diện cài đặt
-  printagent setup [--service|--no-service]          Cài đặt bằng terminal thay cho giao diện web
+  printagent setup [--service|--no-service] [--templates|--no-templates]
+                                                     Cài đặt bằng terminal thay cho giao diện web
   printagent service [status|install|uninstall]      Đăng ký/gỡ chạy nền khi khởi động máy
   printagent doctor                                  Xem kết quả kiểm tra lần cài đặt gần nhất
   printagent mcp [--standalone] [--url ...] [--key ...]  Chạy MCP server qua stdio

@@ -143,6 +143,14 @@ export const en = {
   'setup.step.service.skipped': 'Not registered to run in the background',
   'setup.step.service.skipped_hint': 'Enable it any time: printagent service install',
   'setup.step.service.ok': '{manager}: {unit}',
+  'setup.step.templates': 'Starter templates',
+  'setup.step.templates.created': 'Created {count} of {total} templates',
+  'setup.step.templates.exists': 'All {count} templates already exist',
+  'setup.step.templates.kept': 'Kept the {count} existing templates',
+  'setup.step.templates.skipped': 'Skipped on request',
+  'setup.step.templates.skipped_hint': 'Create them later on the Templates tab, or run: printagent setup --templates',
+  'templates.seed_created': 'Created {count} starter templates',
+  'templates.seed_failed': 'Could not create the starter template {id}: {message}',
 
   'setup.runner': 'Setup',
   'setup.fix_failed': 'Automatic install failed: {message}',
@@ -153,6 +161,9 @@ export const en = {
 
   'cli.setup.title': 'PrintAgent - initial setup',
   'cli.setup.ask_service': 'Register the agent to run in the background at startup?',
+  'cli.setup.ask_locale': 'Chọn ngôn ngữ / Choose language:',
+  'cli.setup.locale_set': 'Language: {language}',
+  'cli.setup.ask_templates': 'Create {count} starter templates (invoices, receipts, cash receipt)?',
   'cli.setup.fixing': 'installing automatically',
   'cli.setup.stopped': 'Stopped at step "{title}".',
   'cli.setup.fix_hint': 'How to fix: {hint}',
@@ -170,7 +181,8 @@ export const en = {
   'cli.tagline': 'PrintAgent - local printing agent',
   'cli.usage': `Usage:
   printagent start [--port 7788] [--host 0.0.0.0] [--no-open]  Run the agent, opens the setup screen on first run
-  printagent setup [--service|--no-service]          Run setup in the terminal instead of the web UI
+  printagent setup [--service|--no-service] [--templates|--no-templates]
+                                                     Run setup in the terminal instead of the web UI
   printagent service [status|install|uninstall]      Register/remove the background service
   printagent doctor                                  Show the result of the last setup check
   printagent mcp [--standalone] [--url ...] [--key ...]  Run the MCP server over stdio

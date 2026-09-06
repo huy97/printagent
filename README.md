@@ -111,6 +111,8 @@ node bin/printagent.js mcp                      # chạy MCP server qua stdio
 Agent nói được tiếng Việt và tiếng Anh.
 
 - **Giao diện web**: nút đổi ngữ trên thanh tiêu đề, cạnh nút Làm mới. Lựa chọn lưu riêng theo từng trình duyệt.
+- **Màn hình cài đặt lần đầu**: nút đổi ngữ ngay góc trên bên trái. Ngôn ngữ chọn ở đây trở thành `agent.locale` và quyết định bộ template mẫu được tạo.
+- **Wizard trong terminal**: `printagent setup` hỏi ngôn ngữ trước tiên rồi lưu vào cấu hình.
 - **API**: mỗi request chọn ngôn ngữ theo header `x-locale`, query `?lang=`, header `accept-language`, rồi `agent.locale` trong cấu hình (mặc định `vi`). Response kèm header `content-language`, mỗi lỗi kèm trường `key` ổn định để client tự dịch nếu muốn.
 - **CLI, log và màn cài đặt trong terminal**: biến môi trường `PRINTAGENT_LANG`, không có thì theo `agent.locale` (đổi được trong tab Cài đặt).
 - **Tài liệu**: [README.en.md](README.en.md) và [llms.en.txt](llms.en.txt); agent đang chạy phục vụ `GET /llms.txt?lang=en`.
@@ -161,7 +163,7 @@ Agent tự mô tả mình qua ba địa chỉ, đều không cần API key nên 
 | Địa chỉ | Nội dung |
 | --- | --- |
 | `GET /.well-known/printagent.json` | Điểm khám phá: phiên bản, nơi đọc tài liệu, ba điểm truy cập REST/WebSocket/MCP, cách xác thực |
-| `GET /openapi.json` | Đặc tả OpenAPI 3.1 của cả 34 endpoint REST, nạp thẳng vào công cụ sinh client hoặc khai báo tool |
+| `GET /openapi.json` | Đặc tả OpenAPI 3.1 của cả 36 endpoint REST, nạp thẳng vào công cụ sinh client hoặc khai báo tool |
 | `GET /llms.txt` | Bản rút gọn dạng văn bản, cũng nằm sẵn trong repo tại [llms.txt](llms.txt) và [llms.en.txt](llms.en.txt) |
 
 Cách nhanh nhất để một tác nhân dùng được PrintAgent là cắm MCP (xem mục [MCP](#mcp)): 13 tool đã kèm mô tả và schema, không cần đọc tài liệu REST.
@@ -232,6 +234,8 @@ Có thể truyền template inline thay cho `templateId`:
 | GET/POST | `/api/templates` | Danh sách / tạo template |
 | GET/PUT/DELETE | `/api/templates/:id` | Xem / sửa / xoá template |
 | POST | `/api/templates/:id/preview` | Render template thành PDF |
+| GET | `/api/templates/seeds` | Danh sách mẫu trong bộ có sẵn (`?lang=vi\|en`) |
+| POST | `/api/templates/seed` | Tạo bộ mẫu của một ngôn ngữ (`{"locale":"en"}`) |
 | GET | `/api/jobs` | Danh sách job (`?status=`, `?limit=`) |
 | GET | `/api/jobs/:id` | Chi tiết job |
 | GET | `/api/jobs/:id/file` | Tải file đã in |
@@ -303,7 +307,11 @@ Template dùng [Handlebars](https://handlebarsjs.com/). Hai kiểu:
 - `html`: render HTML thành PDF bằng Chromium rồi gửi máy in. Dùng cho hoá đơn A4, bill 80mm.
 - `text`: render text thuần, đóng gói lệnh ESC/POS (init, cut, mở két) và gửi thẳng máy in ở chế độ raw.
 
-Agent tạo sẵn 6 template mẫu:
+Agent **không** tự tạo template khi khởi động. Màn hình cài đặt hỏi trước, chỉ tạo khi bạn đồng ý; tạo sau bất cứ lúc nào bằng nút **Bộ mẫu** ở tab Template, `POST /api/templates/seed`, hoặc `printagent setup --templates`.
+
+Có hai bộ mẫu, mỗi bộ 6 template, tạo theo ngôn ngữ đang chọn ở màn cài đặt.
+
+Bộ tiếng Việt:
 
 | Id | Khổ | Dùng cho |
 | --- | --- | --- |
@@ -314,11 +322,26 @@ Agent tạo sẵn 6 template mẫu:
 | `pos-invoice-80mm` | 80mm | Hoá đơn điện tử khởi tạo từ máy tính tiền |
 | `cash-receipt-a5` | A5 | Phiếu thu tiền mặt mẫu 01-TT |
 
-Ba mẫu sau bám theo quy định hiện hành: Nghị định 123/2020/NĐ-CP (sửa đổi tại Nghị định 70/2025/NĐ-CP) và Thông tư 78/2021/TT-BTC cho hoá đơn điện tử, Thông tư 133/2016/TT-BTC cho phiếu thu. Chúng dùng một thuế suất chung cho cả hoá đơn (`vatRate`, `vatAmount`); hoá đơn nhiều thuế suất cần sửa lại bảng tổng hợp.
+Bộ tiếng Anh, dùng USD và định dạng `en-US`:
 
-Helper có sẵn: `currency`, `formatNumber`, `formatDate`, `vndWords`, `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (căn nhãn trái - số phải theo số cột), `ascii` (bỏ dấu tiếng Việt cho máy in nhiệt), `json`, `qr`, `qrDataUri`.
+| Id | Khổ | Dùng cho |
+| --- | --- | --- |
+| `invoice-a4-en` | A4 | Sales invoice, có QR và tiền bằng chữ |
+| `bill-80mm-en` | 80mm | Thermal receipt, render qua PDF |
+| `receipt-escpos-en` | raw | ESC/POS receipt, text thuần |
+| `tax-invoice-a4-en` | A4 | Tax invoice, VAT hai bên, thuế suất theo dòng, khối chữ ký |
+| `pos-receipt-80mm-en` | 80mm | POS tax receipt, tiền khách đưa và tiền thối |
+| `cash-receipt-a5-en` | A5 | Cash receipt, số quyển/số phiếu, 5 ô chữ ký |
+
+Hai bộ dùng id khác nhau nên cài cả hai trên cùng một máy được; tạo lại không ghi đè mẫu đã có.
+
+Ba mẫu cuối của bộ tiếng Việt bám theo quy định hiện hành: Nghị định 123/2020/NĐ-CP (sửa đổi tại Nghị định 70/2025/NĐ-CP) và Thông tư 78/2021/TT-BTC cho hoá đơn điện tử, Thông tư 133/2016/TT-BTC cho phiếu thu. Chúng dùng một thuế suất chung cho cả hoá đơn (`vatRate`, `vatAmount`); hoá đơn nhiều thuế suất cần sửa lại bảng tổng hợp. Bộ tiếng Anh là mẫu thương mại thông dụng, không gắn với biểu mẫu pháp lý của nước nào.
+
+Helper có sẵn: `currency`, `formatNumber`, `formatDate`, `vndWords`, `enWords`, `amountWords`, `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (căn nhãn trái - số phải theo số cột), `ascii` (bỏ dấu tiếng Việt cho máy in nhiệt), `json`, `qr`, `qrDataUri`.
 
 - `{{vndWords 8855000}}` đọc số tiền thành chữ: `Tám triệu tám trăm năm mươi lăm nghìn`.
+- `{{enWords 979.76 currency="USD"}}` đọc bằng tiếng Anh kèm đơn vị: `Nine hundred and seventy-nine US dollars and seventy-six cents only`.
+- `{{amountWords total locale="en" currency="USD"}}` chọn cách đọc theo ngôn ngữ, tiện khi một template dùng cho cả hai.
 - `{{formatDate date day="2-digit" month="2-digit" year="numeric"}}` lấy riêng ngày tháng năm; không truyền thành phần nào thì dùng `dateStyle`/`timeStyle`.
 
 ```handlebars

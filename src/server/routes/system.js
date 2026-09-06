@@ -9,9 +9,12 @@ import * as jobs from '../../core/jobs.js';
 import * as tunnel from '../../core/tunnel.js';
 import { AppError, badRequest, notFound } from '../../util/errors.js';
 import { setLocale, localeFromRequest, LOCALES } from '../../i18n/index.js';
+import { listTemplates } from '../../render/templates.js';
+import { seedCatalog } from '../../render/seed.js';
 import { PATHS } from '../../core/paths.js';
 import {
   setupSummary,
+  rememberTemplateChoice,
   stepPlan,
   startSetupRun,
   getSetupProgress,
@@ -205,6 +208,7 @@ systemRouter.get('/setup', async (req, res, next) => {
     res.json({
       ...summary,
       local,
+      templates: { count: listTemplates().length, catalog: seedCatalog(locale) },
       plan: stepPlan(locale),
       steps: local
         ? summary.steps
@@ -220,8 +224,18 @@ systemRouter.post('/setup/run', (req, res, next) => {
   try {
     requireLocal(req);
     // Các bước có thể tải Chromium hoặc Node nên chạy nền, UI hỏi tiến độ qua /setup/progress.
+    const wantTemplates = req.body?.seedTemplates === true;
+    const locale = LOCALES.includes(req.body?.locale) ? req.body.locale : localeFromRequest(req);
+    rememberTemplateChoice(wantTemplates);
+    // Ngôn ngữ chọn ở màn cài đặt là ngôn ngữ của cả agent: log, CLI và bộ mẫu đều theo nó.
+    if (req.body?.locale && locale !== getConfig().agent.locale) {
+      updateConfig({ agent: { locale } });
+      setLocale(locale);
+    }
     startSetupRun({
       enableService: req.body?.enableService === true,
+      seedTemplates: wantTemplates,
+      locale,
       autoFix: req.body?.autoFix !== false,
     });
     res.status(202).json(getSetupProgress(localeFromRequest(req)));

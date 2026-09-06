@@ -9,7 +9,7 @@ The agent describes itself through three addresses that need no API key:
 | Address | Content |
 | --- | --- |
 | `GET /.well-known/printagent.json` | Discovery endpoint: version, where to read the docs, the three entry points, how to authenticate |
-| `GET /openapi.json` | OpenAPI 3.1 specification of all 34 REST endpoints, for generating a client or loading as tools |
+| `GET /openapi.json` | OpenAPI 3.1 specification of all 36 REST endpoints, for generating a client or loading as tools |
 | `GET /llms.txt` | This file |
 
 Suggested integration order: read `/.well-known/printagent.json` → `GET /api/printers` for printer names → `GET /api/templates/:id` and read `sampleData` to learn the data shape → `POST /api/print/template`.
@@ -55,7 +55,20 @@ Pass a template inline instead of `templateId`: `{ "template": "<h1>{{code}}</h1
 
 Handlebars engine, two kinds: `html` (rendered into a PDF by Chromium) and `text` (raw ESC/POS sent to a thermal printer).
 
-Bundled templates:
+Bundled templates are **not created automatically**: the user has to agree on the setup screen, or you call `POST /api/templates/seed` with `{"locale":"en"}` / `{"locale":"vi"}`. That is why `GET /api/templates` can come back empty. `GET /api/templates/seeds?lang=en` lists a set without creating anything.
+
+The English set (USD, `en-US` formatting):
+
+| Id | Size | Used for |
+| --- | --- | --- |
+| `invoice-a4-en` | A4 | Sales invoice |
+| `bill-80mm-en` | 80mm | Thermal receipt through PDF |
+| `receipt-escpos-en` | raw | ESC/POS receipt, plain text |
+| `tax-invoice-a4-en` | A4 | Tax invoice, VAT numbers on both sides, per-line tax rate |
+| `pos-receipt-80mm-en` | 80mm | POS tax receipt with change due |
+| `cash-receipt-a5-en` | A5 | Cash receipt, five signature blocks |
+
+The Vietnamese set:
 
 | Id | Size | Used for |
 | --- | --- | --- |
@@ -66,9 +79,9 @@ Bundled templates:
 | `pos-invoice-80mm` | 80mm | E-invoice issued from a cash register |
 | `cash-receipt-a5` | A5 | Cash receipt, Vietnamese form 01-TT |
 
-Read a template's data shape with `GET /api/templates/:id` and look at `sampleData` — that is the exact payload shape for `data`.
+Read a template's data shape with `GET /api/templates/:id` and look at `sampleData` — that is the exact payload shape for `data`. The two sets have different data shapes, do not mix them.
 
-Helpers: `currency`, `formatNumber`, `formatDate`, `vndWords` (spells an amount out in Vietnamese words), `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (label left, number right, aligned to a column count), `ascii` (strips Vietnamese diacritics for thermal printers), `json`, `qr`, `qrDataUri`.
+Helpers: `currency`, `formatNumber`, `formatDate`, `vndWords` (spells an amount out in Vietnamese words), `enWords` (English, with the currency name), `amountWords` (picks by `locale=`), `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (label left, number right, aligned to a column count), `ascii` (strips Vietnamese diacritics for thermal printers), `json`, `qr`, `qrDataUri`.
 
 Page settings: `page.format`, `page.width`/`page.height`, `page.landscape`, `page.marginTop|marginRight|marginBottom|marginLeft`. For roll paper set `page.height = "auto"` so the page is cut to the content height.
 
@@ -139,6 +152,8 @@ Logs, the CLI and the terminal setup screen follow the `PRINTAGENT_LANG` environ
 | POST | `/api/printers/:name/default` | Set the default printer |
 | POST | `/api/printers/:name/test` | Print a test page |
 | GET/POST | `/api/templates` | List / create a template |
+| GET | `/api/templates/seeds` | List a starter set (`?lang=vi\|en`) |
+| POST | `/api/templates/seed` | Create the starter set for a language |
 | GET/PUT/DELETE | `/api/templates/:id` | Read / update / delete a template |
 | POST | `/api/templates/:id/preview` | Render a template into a PDF |
 | GET | `/api/jobs` | Job list (`?status=`, `?limit=`) |

@@ -111,6 +111,8 @@ node bin/printagent.js mcp                      # run the MCP server over stdio
 The agent speaks Vietnamese and English.
 
 - **Web UI**: the language button in the title bar, next to Refresh. The choice is stored per browser.
+- **First-run setup screen**: a language button in the top left corner. The language picked there becomes `agent.locale` and decides which starter template set is created.
+- **Terminal wizard**: `printagent setup` asks for the language first and stores the answer in the configuration.
 - **API**: each request picks its language from the `x-locale` header, the `?lang=` query, the `accept-language` header, then `agent.locale` from the configuration (default `vi`). Responses carry a `content-language` header, and every error also carries a stable `key` so a client can translate it itself.
 - **CLI, logs and the terminal setup screen**: the `PRINTAGENT_LANG` environment variable, falling back to `agent.locale` (changeable in the Settings tab).
 - **Documentation**: this file and [llms.en.txt](llms.en.txt); a running agent serves `GET /llms.txt?lang=en`.
@@ -161,7 +163,7 @@ The agent describes itself through three addresses, none of which need an API ke
 | Address | Content |
 | --- | --- |
 | `GET /.well-known/printagent.json` | Discovery endpoint: version, where to read the docs, the three REST/WebSocket/MCP entry points, how to authenticate |
-| `GET /openapi.json` | OpenAPI 3.1 specification of all 34 REST endpoints, ready to feed a client generator or a tool definition |
+| `GET /openapi.json` | OpenAPI 3.1 specification of all 36 REST endpoints, ready to feed a client generator or a tool definition |
 | `GET /llms.txt` | The condensed plain-text version; also in the repo as [llms.txt](llms.txt) and [llms.en.txt](llms.en.txt) |
 
 The fastest way for an agent to use PrintAgent is to plug in MCP (see [MCP](#mcp)): the 13 tools already carry descriptions and schemas, no REST documentation needed.
@@ -232,6 +234,8 @@ A template can be passed inline instead of `templateId`:
 | GET/POST | `/api/templates` | List / create a template |
 | GET/PUT/DELETE | `/api/templates/:id` | Read / update / delete a template |
 | POST | `/api/templates/:id/preview` | Render a template into a PDF |
+| GET | `/api/templates/seeds` | List the templates in a starter set (`?lang=vi\|en`) |
+| POST | `/api/templates/seed` | Create the starter set for a language (`{"locale":"en"}`) |
 | GET | `/api/jobs` | Job list (`?status=`, `?limit=`) |
 | GET | `/api/jobs/:id` | Job details |
 | GET | `/api/jobs/:id/file` | Download the printed file |
@@ -303,7 +307,22 @@ Templates use [Handlebars](https://handlebarsjs.com/). Two kinds:
 - `html`: renders HTML into a PDF with Chromium, then sends it to the printer. Used for A4 invoices and 80mm receipts.
 - `text`: renders plain text, wraps it in ESC/POS commands (init, cut, open drawer) and sends it straight to the printer in raw mode.
 
-The agent ships 6 sample templates:
+The agent does **not** create templates on startup. The setup screen asks first and only creates them if you agree; create them later at any time with the **Starter set** button on the Templates tab, `POST /api/templates/seed`, or `printagent setup --templates`.
+
+There are two sets of 6 templates each, created in the language selected on the setup screen.
+
+The English set, in USD with `en-US` formatting:
+
+| Id | Size | Used for |
+| --- | --- | --- |
+| `invoice-a4-en` | A4 | Sales invoice with QR code and amount in words |
+| `bill-80mm-en` | 80mm | Thermal receipt rendered through PDF |
+| `receipt-escpos-en` | raw | ESC/POS receipt, plain text |
+| `tax-invoice-a4-en` | A4 | Tax invoice: VAT numbers on both sides, per-line tax rate, signature blocks |
+| `pos-receipt-80mm-en` | 80mm | POS tax receipt with amount paid and change |
+| `cash-receipt-a5-en` | A5 | Cash receipt: book and receipt number, five signature blocks |
+
+The Vietnamese set:
 
 | Id | Size | Used for |
 | --- | --- | --- |
@@ -314,11 +333,15 @@ The agent ships 6 sample templates:
 | `pos-invoice-80mm` | 80mm | E-invoice issued from a cash register |
 | `cash-receipt-a5` | A5 | Cash receipt, Vietnamese form 01-TT |
 
-The last three follow current Vietnamese regulations: Decree 123/2020/ND-CP (amended by Decree 70/2025/ND-CP) and Circular 78/2021/TT-BTC for e-invoices, Circular 133/2016/TT-BTC for cash receipts. They use a single tax rate for the whole invoice (`vatRate`, `vatAmount`); an invoice with several rates needs the summary table reworked.
+The two sets use different ids, so both can live on the same machine; creating a set again never overwrites an existing template.
 
-Built-in helpers: `currency`, `formatNumber`, `formatDate`, `vndWords`, `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (label left, number right, aligned to a column count), `ascii` (strips Vietnamese diacritics for thermal printers), `json`, `qr`, `qrDataUri`.
+The last three Vietnamese ones follow current Vietnamese regulations: Decree 123/2020/ND-CP (amended by Decree 70/2025/ND-CP) and Circular 78/2021/TT-BTC for e-invoices, Circular 133/2016/TT-BTC for cash receipts. They use a single tax rate for the whole invoice (`vatRate`, `vatAmount`); an invoice with several rates needs the summary table reworked. The English set is a plain commercial layout, not tied to any country's statutory form.
+
+Built-in helpers: `currency`, `formatNumber`, `formatDate`, `vndWords`, `enWords`, `amountWords`, `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (label left, number right, aligned to a column count), `ascii` (strips Vietnamese diacritics for thermal printers), `json`, `qr`, `qrDataUri`.
 
 - `{{vndWords 8855000}}` spells an amount out in Vietnamese: `Tám triệu tám trăm năm mươi lăm nghìn`.
+- `{{enWords 979.76 currency="USD"}}` spells it out in English with the currency name: `Nine hundred and seventy-nine US dollars and seventy-six cents only`.
+- `{{amountWords total locale="en" currency="USD"}}` picks the spelling by language, handy when one template serves both.
 - `{{formatDate date day="2-digit" month="2-digit" year="numeric"}}` picks individual date parts; with no parts given it uses `dateStyle`/`timeStyle`.
 
 ```handlebars

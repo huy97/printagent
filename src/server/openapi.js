@@ -340,6 +340,55 @@ const PATHS = {
       responses: { 201: jsonResponse('Đã tạo', { $ref: '#/components/schemas/Template' }), default: ERROR_RESPONSE },
     },
   },
+  '/api/templates/seeds': {
+    get: {
+      tags: ['Template'],
+      summary: 'Liệt kê bộ mẫu có sẵn của một ngôn ngữ',
+      parameters: [{ name: 'lang', in: 'query', schema: { type: 'string', enum: ['vi', 'en'] } }],
+      responses: {
+        200: jsonResponse('Bộ mẫu', {
+          type: 'object',
+          properties: {
+            locale: { type: 'string' },
+            seeds: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  engine: { type: 'string', enum: ['html', 'text'] },
+                },
+              },
+            },
+          },
+        }),
+      },
+    },
+  },
+  '/api/templates/seed': {
+    post: {
+      tags: ['Template'],
+      summary: 'Tạo bộ mẫu của một ngôn ngữ, mẫu đã có được giữ nguyên',
+      requestBody: jsonBody({
+        type: 'object',
+        properties: { locale: { type: 'string', enum: ['vi', 'en'] } },
+      }),
+      responses: {
+        201: jsonResponse('Kết quả tạo', {
+          type: 'object',
+          properties: {
+            locale: { type: 'string' },
+            created: { type: 'integer' },
+            skipped: { type: 'integer' },
+            total: { type: 'integer' },
+          },
+        }),
+        default: ERROR_RESPONSE,
+      },
+    },
+  },
   '/api/templates/{id}': {
     get: {
       tags: ['Template'],

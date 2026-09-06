@@ -90,6 +90,82 @@ export function numberToVietnameseWords(value) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+const EN_UNITS = [
+  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen',
+];
+const EN_TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const EN_SCALES = ['', ' thousand', ' million', ' billion', ' trillion'];
+
+/** Tên đơn vị tiền để đọc thành chữ: [số ít, số nhiều, đơn vị lẻ số ít, đơn vị lẻ số nhiều]. */
+const CURRENCY_WORDS = {
+  USD: ['US dollar', 'US dollars', 'cent', 'cents'],
+  EUR: ['euro', 'euros', 'cent', 'cents'],
+  GBP: ['pound sterling', 'pounds sterling', 'penny', 'pence'],
+  AUD: ['Australian dollar', 'Australian dollars', 'cent', 'cents'],
+  CAD: ['Canadian dollar', 'Canadian dollars', 'cent', 'cents'],
+  SGD: ['Singapore dollar', 'Singapore dollars', 'cent', 'cents'],
+  JPY: ['yen', 'yen', 'sen', 'sen'],
+  VND: ['Vietnamese dong', 'Vietnamese dong', 'xu', 'xu'],
+};
+
+function readEnglishTriple(value) {
+  const hundred = Math.floor(value / 100);
+  const rest = value % 100;
+  const parts = [];
+  if (hundred > 0) parts.push(`${EN_UNITS[hundred]} hundred`);
+  if (rest > 0) {
+    if (parts.length > 0) parts.push('and');
+    if (rest < 20) parts.push(EN_UNITS[rest]);
+    else {
+      const ten = Math.floor(rest / 10);
+      const unit = rest % 10;
+      parts.push(unit > 0 ? `${EN_TENS[ten]}-${EN_UNITS[unit]}` : EN_TENS[ten]);
+    }
+  }
+  return parts.join(' ');
+}
+
+export function numberToEnglishWords(value) {
+  const number = Math.trunc(Number(value));
+  if (!Number.isFinite(number)) return '';
+  if (number === 0) return 'Zero';
+  const groups = [];
+  let rest = Math.abs(number);
+  while (rest > 0) {
+    groups.unshift(rest % 1000);
+    rest = Math.floor(rest / 1000);
+  }
+  const words = groups
+    .map((group, index) => {
+      if (group === 0) return '';
+      return `${readEnglishTriple(group)}${EN_SCALES[groups.length - 1 - index] ?? ''}`;
+    })
+    .filter(Boolean)
+    .join(' ');
+  const text = `${number < 0 ? 'minus ' : ''}${words}`;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * Đọc số tiền thành chữ kèm tên đơn vị, dùng cho ô "bằng chữ" trên hoá đơn.
+ * Phần lẻ chỉ đọc với đơn vị tiền có chia nhỏ (USD, EUR...), không áp cho VND.
+ */
+export function amountToEnglishWords(value, currency = 'USD') {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '';
+  const code = String(currency ?? 'USD').toUpperCase();
+  const [singular, plural, fractionSingular, fractionPlural] = CURRENCY_WORDS[code] ?? [code, code, '', ''];
+  const whole = Math.trunc(Math.abs(number));
+  const fraction = fractionPlural ? Math.round((Math.abs(number) - whole) * 100) : 0;
+  const parts = [`${numberToEnglishWords(whole)} ${whole === 1 ? singular : plural}`];
+  if (fraction > 0) {
+    parts.push(`and ${numberToEnglishWords(fraction).toLowerCase()} ${fraction === 1 ? fractionSingular : fractionPlural}`);
+  }
+  const text = `${number < 0 ? 'minus ' : ''}${parts.join(' ')} only`;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export function registerHelpers(handlebars = Handlebars) {
   handlebars.registerHelper('formatNumber', (value, options) => {
     const digits = options?.hash?.digits ?? 0;
@@ -175,6 +251,16 @@ export function registerHelpers(handlebars = Handlebars) {
   });
   handlebars.registerHelper('json', (value) => JSON.stringify(value, null, 2));
   handlebars.registerHelper('vndWords', (value) => numberToVietnameseWords(value));
+
+  handlebars.registerHelper('enWords', (value, options) =>
+    amountToEnglishWords(value, options?.hash?.currency ?? 'USD'),
+  );
+
+  handlebars.registerHelper('amountWords', (value, options) => {
+    const locale = String(options?.hash?.locale ?? 'vi').toLowerCase();
+    if (locale.startsWith('en')) return amountToEnglishWords(value, options?.hash?.currency ?? 'USD');
+    return numberToVietnameseWords(value);
+  });
 
   handlebars.registerHelper('qr', (value, options) => {
     const svg = qrSvg(value, {

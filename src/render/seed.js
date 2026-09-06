@@ -3,6 +3,8 @@ import path from 'node:path';
 import { PATHS } from '../core/paths.js';
 import { listTemplates, createTemplate, templateExists } from './templates.js';
 import { createLogger } from '../util/logger.js';
+import { t } from '../i18n/index.js';
+import { SEEDS_EN } from './seed-en.js';
 
 const log = createLogger('templates');
 
@@ -617,6 +619,22 @@ const SEEDS = [
   },
 ];
 
+const SEED_SETS = { vi: SEEDS, en: SEEDS_EN };
+
+function seedsFor(locale) {
+  return SEED_SETS[String(locale ?? '').toLowerCase().slice(0, 2)] ?? SEEDS;
+}
+
+/** Bộ mẫu của một ngôn ngữ, chỉ phần mô tả để UI liệt kê trước khi tạo. */
+export function seedCatalog(locale) {
+  return seedsFor(locale).map((seed) => ({
+    id: seed.id,
+    name: seed.name,
+    description: seed.description,
+    engine: seed.engine,
+  }));
+}
+
 function readSeeded(marker) {
   if (!existsSync(marker)) return [];
   try {
@@ -628,16 +646,26 @@ function readSeeded(marker) {
   }
 }
 
-export function seedTemplates() {
+/**
+ * Tạo bộ mẫu của một ngôn ngữ. Chỉ chạy khi người dùng đồng ý ở màn cài đặt,
+ * nên `force` bỏ qua marker để tạo thêm bộ ngôn ngữ khác lúc nào cũng được.
+ */
+export function seedTemplates({ locale, force = false } = {}) {
   const marker = path.join(PATHS.templates, '.seeded');
   const seeded = new Set(readSeeded(marker));
   const hasTemplates = listTemplates().length > 0;
-  if (seeded.size === 0 && hasTemplates) return 0;
+  if (!force && seeded.size === 0 && hasTemplates) return 0;
 
   let created = 0;
-  for (const seed of SEEDS) {
-    if (seeded.has(seed.id) || templateExists(seed.id)) {
+  const skipped = [];
+  for (const seed of seedsFor(locale)) {
+    if (templateExists(seed.id)) {
       seeded.add(seed.id);
+      skipped.push(seed.id);
+      continue;
+    }
+    if (!force && seeded.has(seed.id)) {
+      skipped.push(seed.id);
       continue;
     }
     try {
@@ -645,10 +673,10 @@ export function seedTemplates() {
       seeded.add(seed.id);
       created += 1;
     } catch (error) {
-      log.warn(`Không tạo được template mẫu ${seed.id}: ${error.message}`);
+      log.warn(t('templates.seed_failed', { id: seed.id, message: error.message }));
     }
   }
   writeFileSync(marker, JSON.stringify({ seeded: [...seeded], updatedAt: new Date().toISOString() }, null, 2));
-  if (created > 0) log.info(`Đã tạo ${created} template mẫu`);
-  return created;
+  if (created > 0) log.info(t('templates.seed_created', { count: created }));
+  return { created, skipped: skipped.length, total: seedsFor(locale).length };
 }
