@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events';
-import { readFileSync, writeFileSync, existsSync, rmSync, statSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, renameSync, rmSync, statSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { PATHS, ensureDataDirs } from './paths.js';
+import { getDb, closeDb, stmt } from './db.js';
 import { getConfig } from './config.js';
 import { shortId } from '../util/id.js';
 import { createLogger } from '../util/logger.js';
@@ -13,40 +14,141 @@ const log = createLogger('queue');
 export const jobEvents = new EventEmitter();
 jobEvents.setMaxListeners(0);
 
-let jobs = [];
 const pending = [];
 let running = 0;
-let persistTimer = null;
 
-export function loadJobs() {
-  ensureDataDirs();
-  if (!existsSync(PATHS.jobsIndex)) return;
-  try {
-    const parsed = JSON.parse(readFileSync(PATHS.jobsIndex, 'utf8'));
-    jobs = Array.isArray(parsed) ? parsed : [];
-    for (const job of jobs) {
-      if (job.status === 'queued' || job.status === 'rendering' || job.status === 'printing') {
-        job.status = 'failed';
-        job.error = t('error.job_interrupted');
-        job.finishedAt = job.finishedAt ?? new Date().toISOString();
-      }
+// Job đang chạy được giữ nguyên tham chiếu trong `live` để runner, cancelJob và
+// prepare() cùng thao tác trên một object; DB vẫn là nơi lưu trữ chính thức.
+const live = new Map();
+
+const ACTIVE_STATUSES = new Set(['queued', 'rendering', 'printing']);
+const ACTIVE_LIST = [...ACTIVE_STATUSES];
+const FINAL_STATUSES = new Set(['completed', 'failed', 'canceled']);
+
+const COLUMNS = [
+  'id', 'type', 'status', 'printer', 'copies', 'title', 'templateId', 'data', 'templateSource',
+  'engine', 'page', 'fileName', 'filePath', 'bytes', 'options', 'source', 'origin', 'clientId',
+  'attempts', 'nativeJobId', 'output', 'error', 'createdAt', 'startedAt', 'finishedAt',
+];
+const JSON_COLUMNS = new Set(['data', 'page', 'options', 'source']);
+
+function toRow(job) {
+  const row = {};
+  for (const column of COLUMNS) {
+    const value = job[column];
+    if (value === undefined || value === null) {
+      row[column] = null;
+    } else if (JSON_COLUMNS.has(column)) {
+      row[column] = JSON.stringify(value);
+    } else {
+      row[column] = value;
     }
+  }
+  // Các cột NOT NULL: job từ index.json bản cũ có thể thiếu hẳn những field này.
+  row.copies = Number(row.copies) || 1;
+  row.attempts = Number(row.attempts) || 0;
+  row.createdAt = row.createdAt ?? new Date().toISOString();
+  return row;
+}
+
+function parseJson(value) {
+  if (value === null || value === undefined) return null;
+  try {
+    return JSON.parse(value);
   } catch {
-    jobs = [];
+    return null;
   }
 }
 
-function persist() {
-  if (persistTimer) return;
-  persistTimer = setTimeout(() => {
-    persistTimer = null;
-    try {
-      writeFileSync(PATHS.jobsIndex, JSON.stringify(jobs, null, 2));
-    } catch (error) {
-      log.warn(`Không ghi được jobs index: ${error.message}`);
+function rowToJob(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    type: row.type,
+    status: row.status,
+    printer: row.printer,
+    copies: row.copies,
+    title: row.title,
+    templateId: row.templateId,
+    data: parseJson(row.data),
+    templateSource: row.templateSource,
+    engine: row.engine,
+    page: parseJson(row.page),
+    fileName: row.fileName,
+    filePath: row.filePath,
+    bytes: row.bytes,
+    options: parseJson(row.options) ?? {},
+    source: parseJson(row.source),
+    origin: row.origin,
+    clientId: row.clientId,
+    attempts: row.attempts,
+    nativeJobId: row.nativeJobId,
+    output: row.output,
+    error: row.error,
+    createdAt: row.createdAt,
+    startedAt: row.startedAt,
+    finishedAt: row.finishedAt,
+  };
+}
+
+const INSERT_SQL = `INSERT INTO jobs (${COLUMNS.join(', ')})
+  VALUES (${COLUMNS.map((column) => `:${column}`).join(', ')})`;
+
+// Ghi lại toàn bộ cột thay vì chỉ phần patch: một số chỗ (ví dụ prepare() bật
+// options.raw) sửa job tại chỗ rồi mới gọi updateJob với patch khác.
+const UPDATE_SQL = `UPDATE jobs SET ${COLUMNS.filter((column) => column !== 'id')
+  .map((column) => `${column} = :${column}`)
+  .join(', ')} WHERE id = :id`;
+
+function insert(job) {
+  stmt(INSERT_SQL).run(toRow(job));
+}
+
+// UPDATE thuần, không upsert: job đã bị trimJobs xoá thì không được sống lại khi
+// runner còn giữ tham chiếu và gọi updateJob muộn.
+function save(job) {
+  stmt(UPDATE_SQL).run(toRow(job));
+}
+
+/**
+ * DB dùng chung cho mọi process, nên chỉ tiến trình sở hữu queue (lệnh `start`)
+ * được đánh dấu job dở dang là thất bại. CLI hay MCP stdio chạy song song thì
+ * không được phép kết luận job của server là đã chết.
+ */
+export function loadJobs({ recoverInterrupted = false } = {}) {
+  ensureDataDirs();
+  importLegacyIndex(getDb());
+  live.clear();
+  if (!recoverInterrupted) return;
+  const info = stmt(
+    `UPDATE jobs SET status = 'failed', error = ?, finishedAt = COALESCE(finishedAt, ?)
+     WHERE status IN (${ACTIVE_LIST.map(() => '?').join(', ')})`,
+  ).run(t('error.job_interrupted'), new Date().toISOString(), ...ACTIVE_LIST);
+  if (info.changes > 0) {
+    log.warn(`Đã đánh dấu ${info.changes} job bị ngắt giữa chừng là thất bại`);
+  }
+}
+
+// Người dùng bản cũ có lịch sử job trong jobs/index.json; nạp một lần rồi đổi tên file.
+function importLegacyIndex(db) {
+  if (!existsSync(PATHS.jobsIndex)) return;
+  const backup = `${PATHS.jobsIndex}.migrated`;
+  try {
+    if (stmt('SELECT COUNT(*) AS total FROM jobs').get().total === 0) {
+      const parsed = JSON.parse(readFileSync(PATHS.jobsIndex, 'utf8'));
+      // index.json xếp job mới nhất trước; chèn ngược lại để seq tăng theo thời gian.
+      const legacy = Array.isArray(parsed) ? parsed.slice().reverse() : [];
+      db.transaction(() => {
+        for (const job of legacy) {
+          if (job?.id && job.type && job.status) insert(job);
+        }
+      })();
+      if (legacy.length > 0) log.info(`Đã chuyển ${legacy.length} job từ index.json sang SQLite`);
     }
-  }, 300);
-  persistTimer.unref?.();
+    renameSync(PATHS.jobsIndex, backup);
+  } catch (error) {
+    log.warn(`Không chuyển được jobs/index.json: ${error.message}`);
+  }
 }
 
 function emit(event, job) {
@@ -55,14 +157,27 @@ function emit(event, job) {
 }
 
 export function listJobs({ limit = 50, status, printer } = {}) {
-  return jobs
-    .filter((job) => (status ? job.status === status : true))
-    .filter((job) => (printer ? job.printer === printer : true))
-    .slice(0, Number(limit) || 50);
+  const clauses = [];
+  const params = [];
+  if (status) {
+    clauses.push('status = ?');
+    params.push(status);
+  }
+  if (printer) {
+    clauses.push('printer = ?');
+    params.push(printer);
+  }
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  params.push(Number(limit) || 50);
+  return stmt(`SELECT * FROM jobs ${where} ORDER BY seq DESC LIMIT ?`)
+    .all(...params)
+    .map((row) => live.get(row.id) ?? rowToJob(row));
 }
 
 export function findJob(id) {
-  return jobs.find((item) => item.id === id) ?? null;
+  const active = live.get(id);
+  if (active) return active;
+  return rowToJob(stmt('SELECT * FROM jobs WHERE id = ?').get(id));
 }
 
 export function getJob(id) {
@@ -72,11 +187,13 @@ export function getJob(id) {
 }
 
 export function stats() {
-  const counts = jobs.reduce((acc, job) => {
-    acc[job.status] = (acc[job.status] ?? 0) + 1;
-    return acc;
-  }, {});
-  return { total: jobs.length, running, queued: pending.length, counts };
+  const counts = {};
+  let total = 0;
+  for (const row of stmt('SELECT status, COUNT(*) AS total FROM jobs GROUP BY status').all()) {
+    counts[row.status] = row.total;
+    total += row.total;
+  }
+  return { total, running, queued: pending.length, counts };
 }
 
 export function createJob(input) {
@@ -107,32 +224,39 @@ export function createJob(input) {
     startedAt: null,
     finishedAt: null,
   };
-  jobs.unshift(job);
+  live.set(job.id, job);
+  insert(job);
   trimJobs();
-  persist();
   emit('created', job);
   return job;
 }
 
 export function updateJob(job, patch) {
   Object.assign(job, patch);
-  persist();
+  if (ACTIVE_STATUSES.has(job.status)) live.set(job.id, job);
+  else live.delete(job.id);
+  save(job);
   emit('updated', job);
   return job;
 }
 
-const ACTIVE_STATUSES = new Set(['queued', 'rendering', 'printing']);
-
 function trimJobs() {
   const keep = getConfig().queue.keepJobs || 300;
-  if (jobs.length <= keep) return;
-  const keepList = jobs.slice(0, keep);
-  const candidates = jobs.slice(keep);
-  const removed = candidates.filter((job) => !ACTIVE_STATUSES.has(job.status));
-  jobs = keepList.concat(candidates.filter((job) => ACTIVE_STATUSES.has(job.status)));
-  for (const job of removed) {
-    if (job.filePath && job.filePath.startsWith(`${PATHS.files}${path.sep}`) && existsSync(job.filePath)) {
-      rmSync(job.filePath, { force: true });
+  if (stmt('SELECT COUNT(*) AS total FROM jobs').get().total <= keep) return;
+  const removed = stmt(
+    `SELECT id, filePath FROM jobs
+     WHERE status NOT IN (${ACTIVE_LIST.map(() => '?').join(', ')})
+       AND seq < (SELECT MIN(seq) FROM (SELECT seq FROM jobs ORDER BY seq DESC LIMIT ?))`,
+  ).all(...ACTIVE_LIST, keep);
+  if (removed.length === 0) return;
+  const remove = stmt('DELETE FROM jobs WHERE id = ?');
+  getDb().transaction(() => {
+    for (const row of removed) remove.run(row.id);
+  })();
+  for (const row of removed) {
+    live.delete(row.id);
+    if (row.filePath && row.filePath.startsWith(`${PATHS.files}${path.sep}`) && existsSync(row.filePath)) {
+      rmSync(row.filePath, { force: true });
     }
   }
 }
@@ -143,7 +267,10 @@ export function cleanupFiles() {
   if (!existsSync(PATHS.files)) return 0;
   let removed = 0;
   const inUse = new Set(
-    jobs.filter((job) => ACTIVE_STATUSES.has(job.status)).map((job) => job.filePath).filter(Boolean),
+    stmt(`SELECT filePath FROM jobs WHERE status IN (${ACTIVE_LIST.map(() => '?').join(', ')})`)
+      .all(...ACTIVE_LIST)
+      .map((row) => row.filePath)
+      .filter(Boolean),
   );
   for (const entry of readdirSync(PATHS.files)) {
     const file = path.join(PATHS.files, entry);
@@ -159,6 +286,10 @@ export function cleanupFiles() {
   }
   if (removed > 0) log.info(`Đã dọn ${removed} file tạm`);
   return removed;
+}
+
+export function closeJobs() {
+  closeDb();
 }
 
 /**
@@ -261,9 +392,7 @@ function delay(ms) {
 
 export async function cancelJob(id) {
   const job = getJob(id);
-  if (job.status === 'completed' || job.status === 'failed' || job.status === 'canceled') {
-    return job;
-  }
+  if (FINAL_STATUSES.has(job.status)) return job;
   const index = pending.findIndex((task) => task.job.id === id);
   if (index >= 0) pending.splice(index, 1);
   if (job.nativeJobId) await printers.cancelNativeJob(job.nativeJobId).catch(() => false);
@@ -278,7 +407,7 @@ export function waitForJob(id, timeoutMs = 30000) {
       resolve(null);
       return;
     }
-    if (['completed', 'failed', 'canceled'].includes(job.status)) {
+    if (FINAL_STATUSES.has(job.status)) {
       resolve(job);
       return;
     }
@@ -289,7 +418,7 @@ export function waitForJob(id, timeoutMs = 30000) {
     timer.unref?.();
     function onUpdate(updated) {
       if (updated.id !== id) return;
-      if (['completed', 'failed', 'canceled'].includes(updated.status)) {
+      if (FINAL_STATUSES.has(updated.status)) {
         clearTimeout(timer);
         jobEvents.off('updated', onUpdate);
         resolve(updated);

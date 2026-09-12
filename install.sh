@@ -8,7 +8,7 @@
 # PRINTAGENT_HOME=~/.printagent, PRINTAGENT_NO_START=1
 set -euo pipefail
 
-MIN_MAJOR=20
+MIN_MAJOR=22
 NODE_TRACK="${PRINTAGENT_NODE_TRACK:-v22.x}"
 PACKAGE="${PRINTAGENT_PACKAGE:-@hyydev/printagent}"
 HOME_DIR="${PRINTAGENT_HOME:-$HOME/.printagent}"

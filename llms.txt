@@ -211,7 +211,7 @@ printagent tunnel [check|cloudflare|ngrok]
 ├── config.json          # toàn bộ cấu hình
 ├── templates/<id>/      # template.hbs|template.txt + meta.json
 ├── files/               # file của các job
-├── jobs/index.json      # lịch sử job
+├── printagent.db        # lịch sử job (SQLite)
 └── logs/                # log theo ngày
 ```
 

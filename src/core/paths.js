@@ -13,6 +13,7 @@ export const PATHS = {
   files: path.join(DATA_DIR, 'files'),
   logs: path.join(DATA_DIR, 'logs'),
   jobsIndex: path.join(DATA_DIR, 'jobs', 'index.json'),
+  db: path.join(DATA_DIR, 'printagent.db'),
 };
 
 export function ensureDataDirs() {

@@ -164,7 +164,7 @@ export async function startServer({ port, host } = {}) {
   const listenPort = port ?? (process.env.PORT ? Number(process.env.PORT) : config.server.port);
   const listenHost = host ?? config.server.host;
 
-  jobs.loadJobs();
+  jobs.loadJobs({ recoverInterrupted: true });
   jobs.cleanupFiles();
 
   const app = createApp();
@@ -207,6 +207,7 @@ export async function startServer({ port, host } = {}) {
     clearInterval(cleanupTimer);
     await stopTunnel().catch(() => {});
     await closeBrowser().catch(() => {});
+    jobs.closeJobs();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 5000).unref?.();
   };

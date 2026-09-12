@@ -215,7 +215,7 @@ Set `PRINTAGENT_LANG=en` to run the CLI in English, `PRINTAGENT_LANG=vi` for Vie
 ├── config.json          # the whole configuration
 ├── templates/<id>/      # template.hbs|template.txt + meta.json
 ├── files/               # job files
-├── jobs/index.json      # job history
+├── printagent.db        # job history (SQLite)
 └── logs/                # daily logs
 ```
 

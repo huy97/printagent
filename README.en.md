@@ -15,7 +15,7 @@ Four ways to drive it:
 
 ## Requirements
 
-- Node.js >= 20
+- Node.js >= 22
 - macOS/Linux: CUPS (`lp`, `lpstat` - already present on macOS)
 - Windows: installing [SumatraPDF](https://www.sumatrapdfreader.org/) is recommended for silent PDF printing
 - Chromium: `yarn install` downloads Puppeteer's Chrome build, and the setup wizard downloads it again if it is missing. If the machine already has Chrome, point `render.chromePath` at it; the agent also detects a system Chrome when the Puppeteer build fails.
@@ -40,13 +40,13 @@ curl -fsSL https://raw.githubusercontent.com/huy97/printagent/main/install.sh | 
 irm https://raw.githubusercontent.com/huy97/printagent/main/install.ps1 | iex
 ```
 
-The script downloads a portable Node LTS build (verified against its SHA-256) into `~/.printagent/runtime`, installs the agent from npm, creates a `printagent` command and opens the setup screen. If the machine already has Node >= 20 it uses that one and downloads nothing.
+The script downloads a portable Node LTS build (verified against its SHA-256) into `~/.printagent/runtime`, installs the agent from npm, creates a `printagent` command and opens the setup screen. If the machine already has Node >= 22 it uses that one and downloads nothing.
 
 Everything lives under `~/.printagent` (Windows: `%USERPROFILE%\.printagent`); uninstalling means deleting that folder. Re-run the same command to update.
 
 Optional environment variables: `PRINTAGENT_LANG=en` for English output, `PRINTAGENT_NO_START=1` to install without starting, `PRINTAGENT_HOME` to install elsewhere, `PRINTAGENT_NODE_TRACK` to pick another Node line (default `v22.x`).
 
-### Machine that already has Node >= 20
+### Machine that already has Node >= 22
 
 ```bash
 npm install -g @hyydev/printagent
@@ -74,7 +74,7 @@ The installer fixes whatever it can instead of asking the user to install things
 
 | Step | Required | Handled automatically when missing |
 | --- | --- | --- |
-| Node.js >= 20 | yes | installed through nvm (macOS/Linux) or winget/choco (Windows), then re-run with the new Node |
+| Node.js >= 22 | yes | installed through nvm (macOS/Linux) or winget/choco (Windows), then re-run with the new Node |
 | The `~/.printagent` directory | yes | created, write permission checked |
 | Print driver | no | Linux: installs `cups cups-client` and starts the service |
 | Printer | no | discovers IPP printers over mDNS (`dns-sd`/`avahi-browse`) and adds them to CUPS |
@@ -403,7 +403,7 @@ When reached through a tunnel, the interface asks for an API key and stores it i
 ├── config.json          # the whole configuration
 ├── templates/<id>/      # template.hbs|template.txt + meta.json
 ├── files/               # PDF/raw files of the jobs (cleaned up per queue.keepFilesHours)
-├── jobs/index.json      # job history
+├── printagent.db        # job history (SQLite, plus -wal/-shm files)
 └── logs/                # daily logs
 ```
 

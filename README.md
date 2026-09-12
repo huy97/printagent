@@ -15,7 +15,7 @@ Bốn cách điều khiển:
 
 ## Yêu cầu
 
-- Node.js >= 20
+- Node.js >= 22
 - macOS/Linux: CUPS (`lp`, `lpstat` - có sẵn trên macOS)
 - Windows: khuyến nghị cài [SumatraPDF](https://www.sumatrapdfreader.org/) để in PDF im lặng
 - Chromium: `yarn install` tự tải bản Chrome của Puppeteer, wizard cài đặt sẽ tải lại nếu thiếu. Nếu máy đã có Chrome, có thể trỏ `render.chromePath` vào đó; agent cũng tự dò Chrome hệ thống khi bản Puppeteer lỗi.
@@ -40,13 +40,13 @@ curl -fsSL https://raw.githubusercontent.com/huy97/printagent/main/install.sh | 
 irm https://raw.githubusercontent.com/huy97/printagent/main/install.ps1 | iex
 ```
 
-Script tự tải Node LTS bản portable (có đối chiếu SHA-256) vào `~/.printagent/runtime`, cài agent từ npm, tạo lệnh `printagent` rồi mở luôn màn hình cài đặt. Máy đã có Node >= 20 thì nó dùng luôn bản đó, không tải thêm.
+Script tự tải Node LTS bản portable (có đối chiếu SHA-256) vào `~/.printagent/runtime`, cài agent từ npm, tạo lệnh `printagent` rồi mở luôn màn hình cài đặt. Máy đã có Node >= 22 thì nó dùng luôn bản đó, không tải thêm.
 
 Mọi thứ nằm gọn trong `~/.printagent` (Windows: `%USERPROFILE%\.printagent`); gỡ cài đặt là xoá thư mục đó. Chạy lại chính lệnh trên để cập nhật.
 
 Biến môi trường tuỳ chọn: `PRINTAGENT_LANG=en` cho thông báo tiếng Anh, `PRINTAGENT_NO_START=1` để cài xong không chạy ngay, `PRINTAGENT_HOME` để đổi thư mục cài, `PRINTAGENT_NODE_TRACK` để chọn nhánh Node khác (mặc định `v22.x`).
 
-### Máy đã có Node >= 20
+### Máy đã có Node >= 22
 
 ```bash
 npm install -g @hyydev/printagent
@@ -74,7 +74,7 @@ Trình cài đặt tự sửa những gì sửa được, không bắt người 
 
 | Bước | Bắt buộc | Tự xử lý khi thiếu |
 | --- | --- | --- |
-| Node.js >= 20 | có | cài qua nvm (macOS/Linux) hoặc winget/choco (Windows), rồi tự chạy lại bằng Node mới |
+| Node.js >= 22 | có | cài qua nvm (macOS/Linux) hoặc winget/choco (Windows), rồi tự chạy lại bằng Node mới |
 | Thư mục `~/.printagent` | có | tạo thư mục, kiểm tra quyền ghi |
 | Driver in | không | Linux: cài `cups cups-client` rồi bật dịch vụ |
 | Máy in | không | dò máy in IPP qua mDNS (`dns-sd`/`avahi-browse`) và tự thêm vào CUPS |
@@ -403,7 +403,7 @@ Khi truy cập qua tunnel, giao diện sẽ hỏi API key và lưu vào localSto
 ├── config.json          # toàn bộ cấu hình
 ├── templates/<id>/      # template.hbs|template.txt + meta.json
 ├── files/               # file PDF/raw của các job (tự dọn theo queue.keepFilesHours)
-├── jobs/index.json      # lịch sử job
+├── printagent.db        # lịch sử job (SQLite, kèm file -wal/-shm)
 └── logs/                # log theo ngày
 ```
 

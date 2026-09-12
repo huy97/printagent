@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ProgressPreference = 'SilentlyContinue'
 
-$minMajor = 20
+$minMajor = 22
 $track = if ($env:PRINTAGENT_NODE_TRACK) { $env:PRINTAGENT_NODE_TRACK } else { 'v22.x' }
 $package = if ($env:PRINTAGENT_PACKAGE) { $env:PRINTAGENT_PACKAGE } else { '@hyydev/printagent' }
 $paHome = if ($env:PRINTAGENT_HOME) { $env:PRINTAGENT_HOME } else { Join-Path $env:USERPROFILE '.printagent' }
