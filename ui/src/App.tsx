@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { NavLink, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import {
   ArrowLeftRight,
   FileText,
@@ -31,14 +32,14 @@ import { formatUptime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 const TABS = [
-  { value: 'overview', labelKey: 'nav.overview', icon: LayoutGrid, element: <OverviewTab /> },
-  { value: 'printers', labelKey: 'nav.printers', icon: Printer, element: <PrintersTab /> },
-  { value: 'templates', labelKey: 'nav.templates', icon: FileText, element: <TemplatesTab /> },
-  { value: 'jobs', labelKey: 'nav.jobs', icon: Layers, element: <JobsTab /> },
-  { value: 'tunnel', labelKey: 'nav.tunnel', icon: Globe, element: <TunnelTab /> },
-  { value: 'api', labelKey: 'nav.api', icon: ArrowLeftRight, element: <ApiTab /> },
-  { value: 'settings', labelKey: 'nav.settings', icon: Settings, element: <SettingsTab /> },
-] satisfies { value: string; labelKey: MessageKey; icon: typeof LayoutGrid; element: ReactNode }[]
+  { path: 'overview', labelKey: 'nav.overview', icon: LayoutGrid, element: <OverviewTab /> },
+  { path: 'printers', labelKey: 'nav.printers', icon: Printer, element: <PrintersTab /> },
+  { path: 'templates', labelKey: 'nav.templates', icon: FileText, element: <TemplatesTab /> },
+  { path: 'jobs', labelKey: 'nav.jobs', icon: Layers, element: <JobsTab /> },
+  { path: 'tunnel', labelKey: 'nav.tunnel', icon: Globe, element: <TunnelTab /> },
+  { path: 'api-docs', labelKey: 'nav.api', icon: ArrowLeftRight, element: <ApiTab /> },
+  { path: 'settings', labelKey: 'nav.settings', icon: Settings, element: <SettingsTab /> },
+] satisfies { path: string; labelKey: MessageKey; icon: typeof LayoutGrid; element: ReactNode }[]
 
 function KeyDialog() {
   const t = useT()
@@ -72,51 +73,55 @@ function KeyDialog() {
 }
 
 function NavItem({
-  active,
+  to,
   label,
   icon: Icon,
   badge,
-  onSelect,
 }: {
-  active: boolean
+  to: string
   label: string
   icon: typeof LayoutGrid
   badge?: number
-  onSelect: () => void
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        'relative flex h-8.5 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors',
-        active
-          ? 'bg-accent text-foreground font-medium'
-          : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
-      )}
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        cn(
+          'relative flex h-8.5 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors',
+          isActive
+            ? 'bg-accent text-foreground font-medium'
+            : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+        )
+      }
     >
-      {active ? <span className="bg-brand absolute inset-y-1.5 left-0 w-0.5 rounded-full" /> : null}
-      <Icon className={cn('size-4.5 shrink-0', active && 'text-brand')} />
-      <span className="truncate">{label}</span>
-      {badge ? (
-        <span
-          className={cn(
-            'ml-auto inline-flex h-4.5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[11px]',
-            active ? 'bg-brand/15 text-brand' : 'bg-muted text-muted-foreground',
-          )}
-        >
-          {badge}
-        </span>
-      ) : null}
-    </button>
+      {({ isActive }) => (
+        <>
+          {isActive ? <span className="bg-brand absolute inset-y-1.5 left-0 w-0.5 rounded-full" /> : null}
+          <Icon className={cn('size-4.5 shrink-0', isActive && 'text-brand')} />
+          <span className="truncate">{label}</span>
+          {badge ? (
+            <span
+              className={cn(
+                'ml-auto inline-flex h-4.5 min-w-5 items-center justify-center rounded-full px-1.5 font-mono text-[11px]',
+                isActive ? 'bg-brand/15 text-brand' : 'bg-muted text-muted-foreground',
+              )}
+            >
+              {badge}
+            </span>
+          ) : null}
+        </>
+      )}
+    </NavLink>
   )
 }
 
 function Shell() {
   const { t } = useI18n()
+  const { pathname } = useLocation()
   const { health, config, printers, stats, wsConnected, wsReason, loading, refreshAll } = useAgent()
-  const [active, setActive] = useState('overview')
-  const current = TABS.find((tab) => tab.value === active) ?? TABS[0]
+  const segment = pathname.split('/').filter(Boolean)[0] ?? ''
+  const current = TABS.find((tab) => tab.path === segment) ?? TABS[0]
   const pending = (stats?.queued ?? 0) + (stats?.running ?? 0)
   const counts: Record<string, number | undefined> = {
     printers: printers.length || undefined,
@@ -142,12 +147,11 @@ function Shell() {
         <nav className="flex flex-col gap-0.5 pb-4">
           {TABS.map((tab) => (
             <NavItem
-              key={tab.value}
-              active={tab.value === active}
+              key={tab.path}
+              to={`/${tab.path}`}
               label={t(tab.labelKey)}
               icon={tab.icon}
-              badge={counts[tab.value]}
-              onSelect={() => setActive(tab.value)}
+              badge={counts[tab.path]}
             />
           ))}
         </nav>
@@ -232,24 +236,27 @@ function Shell() {
 
           <nav className="flex gap-1 overflow-x-auto px-4 pb-2 sm:px-6 lg:hidden">
             {TABS.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setActive(tab.value)}
-                className={cn(
-                  'h-8 shrink-0 rounded-full px-3 text-sm transition-colors',
-                  tab.value === active
-                    ? 'bg-brand text-brand-foreground font-medium'
-                    : 'text-muted-foreground hover:bg-accent',
-                )}
+              <NavLink
+                key={tab.path}
+                to={`/${tab.path}`}
+                className={({ isActive }) =>
+                  cn(
+                    'flex h-8 shrink-0 items-center rounded-full px-3 text-sm transition-colors',
+                    isActive
+                      ? 'bg-brand text-brand-foreground font-medium'
+                      : 'text-muted-foreground hover:bg-accent',
+                  )
+                }
               >
                 {t(tab.labelKey)}
-              </button>
+              </NavLink>
             ))}
           </nav>
         </header>
 
-        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6">{current.element}</main>
+        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6">
+          <Outlet />
+        </main>
       </div>
 
       <KeyDialog />
@@ -299,7 +306,14 @@ function AppRoutes() {
 
   return (
     <AgentProvider>
-      <Shell />
+      <Routes>
+        <Route element={<Shell />}>
+          {TABS.map((tab) => (
+            <Route key={tab.path} path={tab.path} element={tab.element} />
+          ))}
+          <Route path="*" element={<Navigate to={`/${TABS[0].path}`} replace />} />
+        </Route>
+      </Routes>
     </AgentProvider>
   )
 }

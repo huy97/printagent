@@ -115,7 +115,13 @@ export function createApp() {
       },
     }),
   );
-  app.get('/', (req, res) => {
+  // Fallback cho SPA: F5 hoặc mở trực tiếp một route của UI vẫn trả index.html.
+  // Request tới API, tới file tĩnh hoặc không nhận HTML vẫn đi tiếp để nhận 404 JSON.
+  app.get('*', (req, res, next) => {
+    if (/^\/(api|mcp)(\/|$)/.test(req.path) || path.extname(req.path) || !req.accepts('html')) {
+      next();
+      return;
+    }
     res.setHeader('cache-control', 'no-store');
     res.sendFile(path.join(webDir, 'index.html'));
   });
