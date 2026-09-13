@@ -574,7 +574,7 @@ const SEEDS = [
     description: 'Hoá đơn khổ 80mm cho máy in nhiệt, render qua PDF',
     engine: 'html',
     content: BILL_80MM,
-    page: { width: '80mm', height: '297mm', marginTop: '0mm', marginRight: '0mm', marginBottom: '0mm', marginLeft: '0mm' },
+    page: { width: '80mm', height: 'auto', marginTop: '0mm', marginRight: '0mm', marginBottom: '0mm', marginLeft: '0mm' },
     sampleData: SAMPLE_DATA,
   },
   {

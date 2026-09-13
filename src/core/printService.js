@@ -1,11 +1,11 @@
-import { writeFileSync, existsSync, statSync, copyFileSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, statSync, copyFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { lookup } from 'node:dns/promises';
 import { PATHS, ensureDataDirs } from './paths.js';
 import { getConfig } from './config.js';
 import * as jobs from './jobs.js';
 import * as printers from '../printers/index.js';
-import { renderTemplate } from '../render/pdf.js';
+import { renderTemplate, readPdfPageSize, isStandardPaperSize } from '../render/pdf.js';
 import { getTemplate } from '../render/templates.js';
 import { badRequest } from '../util/errors.js';
 import { createLogger } from '../util/logger.js';
@@ -153,10 +153,25 @@ function mergeOptions(input = {}) {
   };
 }
 
+function hasExplicitPaper(input) {
+  return Boolean(input?.paperSize || input?.media);
+}
+
+// PDF khổ riêng (bill 80mm, tem) mà vẫn gắn khổ mặc định A4 thì driver thu cả trang vào giấy, chữ bé tí.
+function fitPaperToPdf(options, buffer) {
+  if (options.raw) return;
+  const size = readPdfPageSize(buffer);
+  if (!size || isStandardPaperSize(size)) return;
+  options.paperSize = null;
+  options.media = null;
+  log.info(`PDF khổ riêng ${Math.round((size.width * 25.4) / 72)}x${Math.round((size.height * 25.4) / 72)}mm, dùng khổ giấy của máy in`);
+}
+
 export async function submitPdfJob(input = {}) {
   const printer = await printers.resolvePrinterName(input.printer);
   const source = await loadSource(input);
   const options = mergeOptions(input.options ?? input);
+  const explicitPaper = hasExplicitPaper(input.options ?? input);
 
   if (source.buffer && !options.raw && !isPdf(source.buffer) && !input.allowNonPdf) {
     throw badRequest('error.not_pdf');
@@ -175,13 +190,15 @@ export async function submitPdfJob(input = {}) {
     clientId: input.clientId ?? null,
   });
 
-  jobs.enqueue(job, async () => {
+  jobs.enqueue(job, async (currentJob) => {
     if (source.buffer) {
+      if (!explicitPaper) fitPaperToPdf(currentJob.options, source.buffer);
       const stored = storeFile(job.id, source.buffer, options.raw ? 'bin' : 'pdf');
       return { filePath: stored, bytes: source.buffer.length };
     }
     const stored = path.join(PATHS.files, `${job.id}${path.extname(source.path) || '.pdf'}`);
     copyFileSync(source.path, stored);
+    if (!explicitPaper) fitPaperToPdf(currentJob.options, readFileSync(stored));
     return { filePath: stored, bytes: statSync(stored).size };
   });
 
@@ -199,6 +216,7 @@ export async function submitTemplateJob(input = {}) {
     ...(input.options ?? {}),
     raw: input.options?.raw ?? input.raw ?? meta?.printing?.raw ?? false,
   });
+  const explicitPaper = hasExplicitPaper(input.options);
 
   const job = jobs.createJob({
     type: 'template',
@@ -231,6 +249,7 @@ export async function submitTemplateJob(input = {}) {
       const stored = storeFile(currentJob.id, payload, 'bin');
       return { filePath: stored, bytes: payload.length, fileName: `${currentJob.id}.bin` };
     }
+    if (!explicitPaper) fitPaperToPdf(currentJob.options, rendered.buffer);
     const stored = storeFile(currentJob.id, rendered.buffer, 'pdf');
     return { filePath: stored, bytes: rendered.buffer.length, fileName: `${currentJob.id}.pdf` };
   });

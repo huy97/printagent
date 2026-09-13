@@ -77,10 +77,10 @@ export async function getPrinterOptions(name) {
   return options;
 }
 
-function buildOptions({ copies, duplex, paperSize, orientation, media, extraOptions, raw, fitToPage }) {
+function buildOptions({ copies, duplex, orientation, media, extraOptions, raw, fitToPage }) {
   const args = [];
   if (raw) args.push('-o', 'raw');
-  if (paperSize && !raw) args.push('-o', `media=${media || paperSize}`);
+  if (media && !raw) args.push('-o', `media=${media}`);
   if (!raw && duplex && duplex !== 'none') {
     const value =
       duplex === 'long' || duplex === 'two-sided-long-edge'
@@ -99,9 +99,17 @@ function buildOptions({ copies, duplex, paperSize, orientation, media, extraOpti
   return args;
 }
 
+async function defaultMedia(printer) {
+  const pageSize = (await getPrinterOptions(printer)).find((option) => option.key === 'PageSize');
+  return pageSize?.current ?? null;
+}
+
 export async function printFile(filePath, options = {}) {
   const args = ['-d', options.printer, '-t', (options.title || 'PrintAgent job').slice(0, 120)];
-  args.push(...buildOptions(options));
+  // PDF khổ riêng không có paperSize: không gửi media thì macOS rasterize theo khổ PDF (80x297mm) thay vì
+  // khổ giấy đang lắp, nên chỉ định rõ khổ mặc định của máy in để fit-to-page co/căn giữa đúng.
+  const media = options.raw ? null : options.media || options.paperSize || (await defaultMedia(options.printer));
+  args.push(...buildOptions({ ...options, media }));
   args.push(filePath);
   const { stdout } = await run('lp', args, { timeout: options.timeout ?? 60000 });
   const match = stdout.match(/request id is (\S+)/i);

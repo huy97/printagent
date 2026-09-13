@@ -82,7 +82,8 @@ function buildSumatraSettings({ copies, duplex, paperSize, orientation, fitToPag
   if (paperSize) settings.push(`paper=${paperSize}`);
   if (orientation === 'landscape') settings.push('landscape');
   else if (orientation === 'portrait') settings.push('portrait');
-  settings.push(fitToPage === false ? 'noscale' : 'fit');
+  // Không có khổ giấy nghĩa là PDF khổ riêng (bill, tem): chỉ thu nhỏ khi tràn, không phóng to.
+  settings.push(fitToPage === false ? 'noscale' : paperSize ? 'fit' : 'shrink');
   return settings.join(',');
 }
 

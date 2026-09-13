@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import puppeteer from 'puppeteer';
 import { getConfig, updateConfig } from '../core/config.js';
 import { createHandlebars } from './helpers.js';
@@ -204,6 +205,67 @@ function buildPdfOptions(page = {}) {
 }
 
 
+const MEDIA_BOX = /\/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\]/;
+const STANDARD_PAPER_PT = [
+  [842, 1191],
+  [595, 842],
+  [420, 595],
+  [612, 792],
+  [612, 1008],
+];
+
+function objectStreamChunks(buffer, text) {
+  const chunks = [];
+  const pattern = /\d+\s+\d+\s+obj\s*(<<[\s\S]*?>>)\s*stream\r?\n/g;
+  for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
+    const dict = match[1];
+    if (!/\/Type\s*\/ObjStm/.test(dict) || !/\/FlateDecode/.test(dict)) continue;
+    const start = match.index + match[0].length;
+    const end = text.indexOf('endstream', start);
+    const first = Number(/\/First\s+(\d+)/.exec(dict)?.[1]);
+    if (end < 0 || !Number.isFinite(first)) continue;
+    let content;
+    try {
+      content = zlib.inflateSync(buffer.subarray(start, end), { finishFlush: zlib.constants.Z_SYNC_FLUSH }).toString('latin1');
+    } catch {
+      continue;
+    }
+    const offsets = content.slice(0, first).trim().split(/\s+/).filter((_, index) => index % 2 === 1).map(Number);
+    offsets.forEach((offset, index) => {
+      chunks.push(content.slice(first + offset, index + 1 < offsets.length ? first + offsets[index + 1] : undefined));
+    });
+  }
+  return chunks;
+}
+
+/** Khổ trang đầu tiên của PDF theo point (đã tính /Rotate), hoặc null nếu không đọc được. */
+export function readPdfPageSize(buffer) {
+  const text = buffer.toString('latin1');
+  const chunks = [...text.split('endobj'), ...(text.includes('/ObjStm') ? objectStreamChunks(buffer, text) : [])];
+  let inherited = null;
+  let page = null;
+  for (const chunk of chunks) {
+    if (/\/Type\s*\/Pages\b/.test(chunk)) {
+      inherited ??= MEDIA_BOX.exec(chunk);
+    } else if (!page && /\/Type\s*\/Page\b/.test(chunk)) {
+      page = chunk;
+    }
+  }
+  const box = (page && MEDIA_BOX.exec(page)) ?? inherited;
+  if (!box) return null;
+  const [x0, y0, x1, y1] = box.slice(1).map(Number);
+  const width = Math.abs(x1 - x0);
+  const height = Math.abs(y1 - y0);
+  if (!width || !height) return null;
+  const rotate = Math.abs(Number(/\/Rotate\s+(-?\d+)/.exec(page ?? '')?.[1] ?? 0)) % 180;
+  return rotate === 90 ? { width: height, height: width } : { width, height };
+}
+
+export function isStandardPaperSize({ width, height }) {
+  const [short, long] = width < height ? [width, height] : [height, width];
+  return STANDARD_PAPER_PT.some(([w, h]) => Math.abs(short - w) <= 3 && Math.abs(long - h) <= 3);
+}
+
 const CSS_UNITS = { px: 1, pt: 96 / 72, pc: 16, in: 96, cm: 96 / 2.54, mm: 96 / 25.4 };
 
 function cssLengthToPx(value) {
@@ -219,14 +281,14 @@ async function measureAutoHeight(tab, page) {
   const width = cssLengthToPx(page.width);
   if (!width) return null;
   await tab.setViewport({ width: Math.floor(width), height: 600 });
+  // Không dùng documentElement.scrollHeight: nó không bao giờ nhỏ hơn viewport nên bill ngắn cũng thành 600px.
   const content = await tab.evaluate(() => {
     const body = document.body;
-    const root = document.documentElement;
-    const bottom = Math.max(
-      ...Array.from(body.children).map((node) => node.getBoundingClientRect().bottom + window.scrollY),
-      0,
-    );
-    return Math.max(body.scrollHeight, body.offsetHeight, root.scrollHeight, root.offsetHeight, bottom);
+    let bottom = body.getBoundingClientRect().bottom + (parseFloat(getComputedStyle(body).marginBottom) || 0);
+    for (const node of body.querySelectorAll('*')) {
+      bottom = Math.max(bottom, node.getBoundingClientRect().bottom);
+    }
+    return Math.max(bottom + window.scrollY, 0);
   });
   const vertical = (cssLengthToPx(page.marginTop) ?? 0) + (cssLengthToPx(page.marginBottom) ?? 0);
   const padding = cssLengthToPx(page.autoHeightPadding ?? '2mm') ?? 0;

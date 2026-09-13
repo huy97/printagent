@@ -499,7 +499,7 @@ export const SEEDS_EN = [
     description: '80mm receipt for a thermal printer, rendered through PDF',
     engine: 'html',
     content: BILL_80MM,
-    page: { width: '80mm', height: '297mm', marginTop: '0mm', marginRight: '0mm', marginBottom: '0mm', marginLeft: '0mm' },
+    page: { width: '80mm', height: 'auto', marginTop: '0mm', marginRight: '0mm', marginBottom: '0mm', marginLeft: '0mm' },
     sampleData: SAMPLE_DATA,
   },
   {
