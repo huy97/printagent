@@ -83,7 +83,7 @@ Read a template's data shape with `GET /api/templates/:id` and look at `sampleDa
 
 Helpers: `currency`, `formatNumber`, `formatDate`, `vndWords` (spells an amount out in Vietnamese words), `enWords` (English, with the currency name), `amountWords` (picks by `locale=`), `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (label left, number right, aligned to a column count), `ascii` (strips Vietnamese diacritics for thermal printers), `json`, `qr`, `qrDataUri`.
 
-Page settings: `page.format`, `page.width`/`page.height`, `page.landscape`, `page.marginTop|marginRight|marginBottom|marginLeft`. For roll paper set `page.height = "auto"` so the page is cut to the content height.
+Page settings: `page.format`, `page.width`/`page.height`, `page.landscape`, `page.marginTop|marginRight|marginBottom|marginLeft`. For roll paper set `page.height = "auto"` so the page is cut to the content height. With a custom page size the agent injects a doctype and frame CSS (html/body margin 0, box-sizing: border-box) ahead of the template styles; set `page.frame = false` to turn that off.
 
 ## What a print request returns
 

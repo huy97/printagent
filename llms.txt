@@ -83,7 +83,7 @@ Lấy cấu trúc dữ liệu của một mẫu bằng `GET /api/templates/:id` 
 
 Helper: `currency`, `formatNumber`, `formatDate`, `vndWords` (đọc số tiền thành chữ tiếng Việt), `enWords` (tiếng Anh, kèm tên đơn vị tiền), `amountWords` (chọn theo `locale=`), `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (căn nhãn trái - số phải theo số cột), `ascii` (bỏ dấu tiếng Việt cho máy in nhiệt), `json`, `qr`, `qrDataUri`.
 
-Cấu hình trang: `page.format`, `page.width`/`page.height`, `page.landscape`, `page.marginTop|marginRight|marginBottom|marginLeft`. Với giấy cuộn đặt `page.height = "auto"` để cắt theo chiều cao nội dung.
+Cấu hình trang: `page.format`, `page.width`/`page.height`, `page.landscape`, `page.marginTop|marginRight|marginBottom|marginLeft`. Với giấy cuộn đặt `page.height = "auto"` để cắt theo chiều cao nội dung. Với khổ tuỳ chỉnh, agent tự chèn doctype và CSS khung (html/body margin 0, box-sizing: border-box) trước style của template; đặt `page.frame = false` để tắt.
 
 ## Kết quả trả về của một lệnh in
 

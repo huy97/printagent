@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { ExternalLink, FileText, Plus, Printer, RefreshCw, Save, Sparkles, Trash2 } from 'lucide-react'
+import { ExternalLink, FileText, Plus, Printer, RefreshCw, Save, Sparkles, TriangleAlert, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,7 @@ import { Field } from '@/components/field'
 import { useConfirm } from '@/components/confirm-dialog'
 import { useAgent, reportError } from '@/hooks/use-agent'
 import { useI18n, useT, type Translate } from '@/i18n'
-import { api, type Template } from '@/lib/api'
+import { api, type RenderLayout, type Template } from '@/lib/api'
 import { formatTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -50,6 +50,7 @@ export function TemplatesTab() {
   const [previewText, setPreviewText] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
+  const [layout, setLayout] = useState<RenderLayout | null>(null)
   const [busy, setBusy] = useState(false)
   const [seeding, setSeeding] = useState(false)
 
@@ -71,6 +72,7 @@ export function TemplatesTab() {
       setPreviewUrl(null)
       setPreviewText(null)
       setPreviewError(null)
+      setLayout(null)
       void renderPreview(template, template.sampleData ?? {})
     } catch (error) {
       reportError(error)
@@ -80,7 +82,7 @@ export function TemplatesTab() {
   const renderPreview = async (template: Template, data: Record<string, unknown>) => {
     setPreviewing(true)
     try {
-      const blob = await api.renderPreview({
+      const { blob, layout: rendered } = await api.renderPreview({
         template: template.content,
         engine: template.engine,
         data,
@@ -89,6 +91,7 @@ export function TemplatesTab() {
       // Bill text hiển thị thẳng bằng <pre>: blob text/plain nhúng trong iframe không chạy trên mọi trình duyệt.
       setPreviewText(template.engine === 'text' ? await blob.text() : null)
       setPreviewUrl(URL.createObjectURL(blob))
+      setLayout(rendered)
       setPreviewError(null)
     } catch (error) {
       setPreviewError(error instanceof Error ? error.message : String(error))
@@ -438,9 +441,15 @@ export function TemplatesTab() {
               ? current.printing.raw
                 ? t('templates.text_raw')
                 : 'text'
-              : current.page.width
-                ? `${current.page.width} × ${current.page.height ?? 'auto'}`
-                : (current.page.format ?? 'A4')}
+              : layout
+                ? t('templates.render_size', {
+                    width: layout.widthMm,
+                    height: layout.heightMm,
+                    pages: layout.pages,
+                  })
+                : current.page.width
+                  ? `${current.page.width} × ${current.page.height ?? 'auto'}`
+                  : (current.page.format ?? 'A4')}
           </span>
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {previewText !== null ? (
@@ -456,6 +465,12 @@ export function TemplatesTab() {
             </Button>
           </div>
         </CardHeader>
+        {layout && layout.pages > 1 ? (
+          <div className="flex shrink-0 items-start gap-2 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-400">
+            <TriangleAlert className="mt-px size-3.5 shrink-0" />
+            <span>{t('templates.overflow_warning', { pages: layout.pages })}</span>
+          </div>
+        ) : null}
         <CardContent className="bg-muted/30 min-h-0 flex-1 p-0">
           {previewError ? (
             <div className="text-destructive flex h-full min-h-64 items-center justify-center px-6 py-8 text-center text-xs">

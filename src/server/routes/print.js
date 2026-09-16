@@ -7,6 +7,19 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 64 
 
 export const printRouter = Router();
 
+/**
+ * Khổ thật của bản render đi kèm response để màn xem trước báo số đo và cảnh báo tràn khổ.
+ * Đặt ở header nên thân response vẫn là PDF thuần, tải thẳng ra file được.
+ */
+export function sendLayoutHeaders(res, layout) {
+  if (!layout) return;
+  res.set('X-Render-Width-Mm', String(layout.widthMm));
+  res.set('X-Render-Height-Mm', String(layout.heightMm));
+  res.set('X-Render-Pages', String(layout.pages));
+  res.set('Access-Control-Expose-Headers', 'X-Render-Width-Mm, X-Render-Height-Mm, X-Render-Pages');
+}
+
+
 function parseBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
   return value === true || value === 'true' || value === '1' || value === 1;
@@ -94,6 +107,7 @@ printRouter.post('/render', async (req, res, next) => {
       data: body.data ?? body.variables ?? {},
       page: body.page,
     });
+    sendLayoutHeaders(res, rendered.layout);
     if (req.query.format === 'html' && rendered.html) {
       res.type('html').send(rendered.html);
       return;

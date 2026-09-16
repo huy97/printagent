@@ -9,6 +9,12 @@ const ERROR_RESPONSE = {
   },
 };
 
+const RENDER_HEADERS = {
+  'X-Render-Width-Mm': { description: 'Chiều rộng thật của trang PDF, tính bằng mm', schema: { type: 'number' } },
+  'X-Render-Height-Mm': { description: 'Chiều cao thật của trang PDF, tính bằng mm', schema: { type: 'number' } },
+  'X-Render-Pages': { description: 'Số trang của PDF; lớn hơn 1 nghĩa là nội dung tràn khổ đã đặt', schema: { type: 'integer' } },
+};
+
 const SCHEMAS = {
   Error: {
     type: 'object',
@@ -76,6 +82,10 @@ const SCHEMAS = {
       marginRight: { type: 'string' },
       marginBottom: { type: 'string' },
       marginLeft: { type: 'string' },
+      frame: {
+        type: 'boolean',
+        description: 'Mặc định true: khi có khổ tuỳ chỉnh, agent chèn sẵn doctype và CSS khung (bỏ lề mặc định của trình duyệt, box-sizing: border-box). Đặt false nếu template tự lo hết',
+      },
     },
   },
   PrintOptions: {
@@ -249,6 +259,7 @@ const PATHS = {
       responses: {
         200: {
           description: 'Tài liệu đã render',
+          headers: RENDER_HEADERS,
           content: {
             'application/pdf': { schema: { type: 'string', format: 'binary' } },
             'text/plain': { schema: { type: 'string' } },
@@ -429,6 +440,7 @@ const PATHS = {
       responses: {
         200: {
           description: 'Tài liệu đã render',
+          headers: RENDER_HEADERS,
           content: {
             'application/pdf': { schema: { type: 'string', format: 'binary' } },
             'text/plain': { schema: { type: 'string' } },

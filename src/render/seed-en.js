@@ -483,6 +483,127 @@ const CASH_RECEIPT_DATA = {
   note: 'Cashier must count the cash in the presence of the payer before signing.',
 };
 
+const SHIPPING_LABEL_EN = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><style>
+  @page { size: 100mm 150mm; margin: 0; }
+  * { box-sizing: border-box; font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  body { width: 100mm; height: 150mm; margin: 0; padding: 2mm; color: #000; font-size: 8pt; line-height: 1.25; overflow: hidden; }
+  .label { height: 100%; border: 0.4mm solid #000; display: flex; flex-direction: column; }
+  .row { display: flex; }
+  .grow { flex: 1; min-width: 0; }
+  .pad { padding: 1.3mm 2mm; }
+  .line { border-bottom: 0.3mm solid #000; }
+  .divider { border-left: 0.3mm solid #000; }
+  .tag { font-size: 6.5pt; text-transform: uppercase; letter-spacing: .06em; }
+  .strong { font-weight: 700; }
+  .clamp { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+  .clamp2 { -webkit-line-clamp: 2; }
+  .clamp3 { -webkit-line-clamp: 3; }
+  .carrier { font-size: 12pt; font-weight: 800; letter-spacing: -.01em; }
+  .service { font-size: 8.5pt; font-weight: 700; text-align: right; line-height: 1.15; }
+  .code svg { display: block; width: 100%; height: 12mm; }
+  .code-text { font-size: 10pt; font-weight: 700; letter-spacing: .12em; text-align: center; margin-top: .6mm; }
+  .route { font-size: 17pt; font-weight: 800; line-height: 1; letter-spacing: .02em; }
+  .to-name { font-size: 11.5pt; font-weight: 800; }
+  .to-phone { font-size: 10.5pt; font-weight: 700; }
+  .to-address { font-size: 8.5pt; }
+  .cod-amount { font-size: 13pt; font-weight: 800; }
+  .qr svg { display: block; width: 100%; height: auto; }
+  .foot { font-size: 7pt; margin-top: auto; }
+  .sign { height: 11mm; }
+</style></head>
+<body>
+  <div class="label">
+    <div class="row line">
+      <div class="pad grow">
+        <div class="carrier">{{carrier.name}}</div>
+        <div class="tag">{{carrier.hotline}}</div>
+      </div>
+      <div class="pad divider" style="width:30mm">
+        <div class="service">{{carrier.service}}</div>
+        <div class="tag" style="text-align:right">{{formatDate order.createdAt locale="en-US" dateStyle="medium"}}</div>
+      </div>
+    </div>
+
+    <div class="pad line code">
+      {{{barcode order.code height=40 moduleWidth=1}}}
+      <div class="code-text">{{order.code}}</div>
+    </div>
+
+    <div class="row line">
+      <div class="pad grow">
+        <div class="tag">From</div>
+        <div class="strong">{{sender.name}} · {{sender.phone}}</div>
+        <div class="clamp clamp2">{{sender.address}}</div>
+      </div>
+      <div class="pad divider" style="width:26mm;text-align:center">
+        <div class="tag">Route</div>
+        <div class="route">{{order.route}}</div>
+      </div>
+    </div>
+
+    <div class="pad line grow">
+      <div class="tag">Ship to</div>
+      <div class="to-name">{{receiver.name}}</div>
+      <div class="to-phone">{{receiver.phone}}</div>
+      <div class="to-address clamp clamp3">{{receiver.address}}</div>
+    </div>
+
+    <div class="row line">
+      <div class="pad grow">
+        <div class="tag">Cash on delivery</div>
+        <div class="cod-amount">{{#if cod}}{{currency cod locale="en-US" currency=currency}}{{else}}Prepaid{{/if}}</div>
+        <div class="tag" style="margin-top:.8mm">Weight {{order.weight}} kg · {{order.pieces}} piece(s)</div>
+        <div class="tag">Order {{order.reference}}</div>
+      </div>
+      <div class="pad divider qr" style="width:24mm">
+        {{{qr order.code size=120 margin=0}}}
+      </div>
+    </div>
+
+    <div class="pad line">
+      <div class="tag">Contents</div>
+      <div class="clamp clamp2">{{content}}</div>
+      {{#if note}}<div class="tag" style="margin-top:.8mm">Handling</div><div class="clamp clamp2">{{note}}</div>{{/if}}
+    </div>
+
+    <div class="row foot">
+      <div class="pad grow sign">
+        <div class="tag">Sender signature</div>
+      </div>
+      <div class="pad divider grow sign">
+        <div class="tag">Received by, print name</div>
+      </div>
+    </div>
+  </div>
+</body></html>`;
+
+const SHIPPING_LABEL_DATA_EN = {
+  carrier: { name: 'SWIFT PARCEL', service: 'Express delivery', hotline: 'Support 1-800-555-0100' },
+  order: {
+    code: 'SWP2026041500312',
+    reference: 'ORD-2026-0042',
+    createdAt: '2026-01-15T08:30:00.000Z',
+    route: 'SF-04',
+    weight: 1.2,
+    pieces: 1,
+  },
+  sender: {
+    name: 'ABC TRADING LTD',
+    phone: '+1 415 555 0142',
+    address: '1200 Market Street, Suite 400, San Francisco, CA 94102',
+  },
+  receiver: {
+    name: 'Jonathan Miller',
+    phone: '+1 408 555 0188',
+    address: '855 Winchester Boulevard, Apt 12B, San Jose, CA 95128',
+  },
+  cod: 145.5,
+  currency: 'USD',
+  content: 'Apparel, 2 items',
+  note: 'Inspection allowed, no try-on',
+};
+
 export const SEEDS_EN = [
   {
     id: 'invoice-a4-en',
@@ -530,6 +651,16 @@ export const SEEDS_EN = [
     content: POS_RECEIPT_80MM,
     page: { width: '80mm', height: 'auto', marginTop: '0mm', marginRight: '0mm', marginBottom: '0mm', marginLeft: '0mm' },
     sampleData: POS_RECEIPT_DATA,
+  },
+  {
+    id: 'shipping-label-100x150-en',
+    name: 'Shipping label (100x150mm)',
+    description:
+      'Courier label for 100x150mm thermal label printers: Code 128 barcode and QR of the tracking number, sender, recipient, route and cash on delivery. Prints 1:1, fills one label',
+    engine: 'html',
+    content: SHIPPING_LABEL_EN,
+    page: { width: '100mm', height: '150mm', marginTop: '0mm', marginRight: '0mm', marginBottom: '0mm', marginLeft: '0mm' },
+    sampleData: SHIPPING_LABEL_DATA_EN,
   },
   {
     id: 'cash-receipt-a5-en',

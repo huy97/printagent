@@ -173,6 +173,11 @@ export function renderTemplateString(source, data, cacheKey, noEscape = false) {
   }
 }
 
+/** Chiều cao để trống hoặc ghi "auto" đều là đo theo nội dung. */
+export function isAutoHeight(height) {
+  return !height || String(height).trim().toLowerCase() === 'auto';
+}
+
 function buildPdfOptions(page = {}) {
   const config = getConfig().render;
   const options = {
@@ -187,12 +192,14 @@ function buildPdfOptions(page = {}) {
     },
     preferCSSPageSize: Boolean(page.preferCSSPageSize),
   };
-  if (page.width && page.height && page.height !== 'auto') {
+  if (page.width) {
     options.width = page.width;
+    // Bỏ trống chiều cao nghĩa là theo nội dung; htmlToPdf đo trước và thay bằng số đo thật,
+    // còn 297mm chỉ là lối thoát khi đo hụt.
+    options.height = isAutoHeight(page.height) ? '297mm' : page.height;
+  } else if (page.height && !isAutoHeight(page.height)) {
     options.height = page.height;
-  } else if (page.width) {
-    options.width = page.width;
-    options.height = page.height ?? '297mm';
+    options.width = page.width ?? '210mm';
   } else {
     options.format = page.format ?? config.format ?? 'A4';
   }
@@ -238,10 +245,25 @@ function objectStreamChunks(buffer, text) {
   return chunks;
 }
 
+function pdfChunks(buffer) {
+  const text = buffer.toString('latin1');
+  return [...text.split('endobj'), ...(text.includes('/ObjStm') ? objectStreamChunks(buffer, text) : [])];
+}
+
+/** Số trang của PDF, lấy từ /Count lớn nhất của cây /Pages; 1 nếu không đọc được. */
+export function readPdfPageCount(buffer) {
+  let count = 0;
+  for (const chunk of pdfChunks(buffer)) {
+    if (!/\/Type\s*\/Pages\b/.test(chunk)) continue;
+    const value = Number(/\/Count\s+(\d+)/.exec(chunk)?.[1]);
+    if (Number.isFinite(value)) count = Math.max(count, value);
+  }
+  return count || 1;
+}
+
 /** Khổ trang đầu tiên của PDF theo point (đã tính /Rotate), hoặc null nếu không đọc được. */
 export function readPdfPageSize(buffer) {
-  const text = buffer.toString('latin1');
-  const chunks = [...text.split('endobj'), ...(text.includes('/ObjStm') ? objectStreamChunks(buffer, text) : [])];
+  const chunks = pdfChunks(buffer);
   let inherited = null;
   let page = null;
   for (const chunk of chunks) {
@@ -278,21 +300,64 @@ function cssLengthToPx(value) {
 
 // Khổ giấy cuộn (máy in nhiệt) không có chiều cao cố định: đo nội dung rồi cắt đúng chỗ.
 async function measureAutoHeight(tab, page) {
+  const config = getConfig().render;
+  // Lề phải lấy đúng thứ buildPdfOptions sẽ dùng, kể cả khi template bỏ trống và rơi về config,
+  // nếu không thì đo hụt và trang bị cắt làm đôi.
+  const margin = (side) => cssLengthToPx(page[side] ?? config[side]) ?? 0;
   const width = cssLengthToPx(page.width);
   if (!width) return null;
-  await tab.setViewport({ width: Math.floor(width), height: 600 });
-  // Không dùng documentElement.scrollHeight: nó không bao giờ nhỏ hơn viewport nên bill ngắn cũng thành 600px.
+  const inner = Math.max(Math.floor(width - margin('marginLeft') - margin('marginRight')), 1);
+  await tab.setViewport({ width: inner, height: 600 });
+  // Đo theo nội dung chứ không theo body hay documentElement: cả hai đều không nhỏ hơn khung nhìn
+  // nên bill ngắn cũng bị kéo thành 600px.
   const content = await tab.evaluate(() => {
     const body = document.body;
-    let bottom = body.getBoundingClientRect().bottom + (parseFloat(getComputedStyle(body).marginBottom) || 0);
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    let bottom = range.getBoundingClientRect().bottom;
     for (const node of body.querySelectorAll('*')) {
       bottom = Math.max(bottom, node.getBoundingClientRect().bottom);
     }
-    return Math.max(bottom + window.scrollY, 0);
+    // Nội dung không bao gồm padding và margin dưới của body, nhưng giấy thì có.
+    const tail = (element) => {
+      const style = getComputedStyle(element);
+      return (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.marginBottom) || 0);
+    };
+    return Math.max(bottom + tail(body) + tail(document.documentElement) + window.scrollY, 0);
   });
-  const vertical = (cssLengthToPx(page.marginTop) ?? 0) + (cssLengthToPx(page.marginBottom) ?? 0);
+  const vertical = margin('marginTop') + margin('marginBottom');
   const padding = cssLengthToPx(page.autoHeightPadding ?? '2mm') ?? 0;
   return `${Math.max(Math.ceil(content + vertical + padding), 1)}px`;
+}
+
+// HTML người dùng dán vào không tự biết khổ giấy: chèn sẵn khung để lề mặc định 8px của
+// trình duyệt và padding không đẩy nội dung tràn ra ngoài tem. Style đứng trước mọi style của
+// template nên template tự đặt lại được; đặt page.frame = false để bỏ hẳn.
+const FRAME_ANCHORS = [/<head[^>]*>/i, /<body[^>]*>/i, /<html[^>]*>/i, /<!doctype[^>]*>/i];
+
+function pageFrameStyle(page) {
+  const rules = ['html,body{margin:0;padding:0}', '*,*::before,*::after{box-sizing:border-box}'];
+  if (page.width && !isAutoHeight(page.height)) {
+    rules.unshift(`@page{size:${page.width} ${page.height}}`);
+  }
+  return `<style data-printagent-frame>${rules.join('')}</style>`;
+}
+
+export function withPageFrame(html, page = {}) {
+  const custom = page.width || (page.height && !isAutoHeight(page.height));
+  if (!custom || page.frame === false) return html;
+  const style = pageFrameStyle(page);
+  // Thiếu doctype là trình duyệt vào quirks mode, ở đó body bị kéo cao bằng khung nhìn và
+  // phép đo chiều cao tự động hụt hẳn so với nội dung thật.
+  const doctype = /^\s*<!doctype/i.test(html) ? '' : '<!doctype html>';
+  for (const anchor of FRAME_ANCHORS) {
+    const match = anchor.exec(html);
+    if (match) {
+      const at = match.index + match[0].length;
+      return `${doctype}${html.slice(0, at)}${style}${html.slice(at)}`;
+    }
+  }
+  return `${doctype}${style}${html}`;
 }
 
 async function waitForAssets(tab, timeoutMs) {
@@ -321,13 +386,13 @@ export async function htmlToPdf(html, page = {}) {
   try {
     tab = await instance.newPage();
     await tab.emulateMediaType('print');
-    await tab.setContent(html, { waitUntil: 'load', timeout: page.timeout ?? 30000 });
+    await tab.setContent(withPageFrame(html, page), { waitUntil: 'load', timeout: page.timeout ?? 30000 });
     if (page.waitForSelector) {
       await tab.waitForSelector(page.waitForSelector, { timeout: 10000 }).catch(() => {});
     }
     await waitForAssets(tab, page.assetTimeout ?? 10000);
     let effective = page;
-    if (page.width && page.height === 'auto') {
+    if (page.width && isAutoHeight(page.height)) {
       const height = await measureAutoHeight(tab, page);
       if (height) effective = { ...page, height };
     }

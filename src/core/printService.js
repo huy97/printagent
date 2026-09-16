@@ -5,7 +5,7 @@ import { PATHS, ensureDataDirs } from './paths.js';
 import { getConfig } from './config.js';
 import * as jobs from './jobs.js';
 import * as printers from '../printers/index.js';
-import { renderTemplate, readPdfPageSize, isStandardPaperSize } from '../render/pdf.js';
+import { renderTemplate, readPdfPageSize, readPdfPageCount, isStandardPaperSize } from '../render/pdf.js';
 import { getTemplate } from '../render/templates.js';
 import { badRequest } from '../util/errors.js';
 import { createLogger } from '../util/logger.js';
@@ -269,6 +269,23 @@ function buildRawPayload(text, escpos = {}) {
   return Buffer.concat(chunks);
 }
 
+const PT_PER_MM = 72 / 25.4;
+
+/**
+ * Khổ thật của bản render kèm số trang, để màn xem trước báo ngay khi nội dung
+ * tràn khỏi khổ đã cấu hình thay vì đợi in ra giấy mới biết.
+ */
+function layoutOf(rendered) {
+  if (rendered.engine !== 'html') return null;
+  const size = readPdfPageSize(rendered.buffer);
+  if (!size) return null;
+  return {
+    widthMm: Math.round((size.width / PT_PER_MM) * 10) / 10,
+    heightMm: Math.round((size.height / PT_PER_MM) * 10) / 10,
+    pages: readPdfPageCount(rendered.buffer),
+  };
+}
+
 export async function previewTemplate(input = {}) {
   const rendered = await renderTemplate({
     templateId: input.templateId,
@@ -277,7 +294,7 @@ export async function previewTemplate(input = {}) {
     data: input.data ?? {},
     page: input.page,
   });
-  return rendered;
+  return { ...rendered, layout: layoutOf(rendered) };
 }
 
 export async function printTestPage(printerName) {

@@ -274,6 +274,17 @@ async function rawRequest(path: string, options: RequestOptions = {}): Promise<R
   return fetch(url, { method: options.method ?? 'GET', headers, body })
 }
 
+export interface RenderLayout {
+  widthMm: number
+  heightMm: number
+  pages: number
+}
+
+export interface RenderResult {
+  blob: Blob
+  layout: RenderLayout | null
+}
+
 async function blobRequest(path: string, options: RequestOptions = {}): Promise<Blob> {
   const response = await rawRequest(path, options)
   if (!response.ok) {
@@ -324,7 +335,26 @@ export const api = {
 
   printPdf: (body: FormData | Record<string, unknown>) => request<Job>('/api/print/pdf', { method: 'POST', body }),
   printTemplate: (body: Record<string, unknown>) => request<Job>('/api/print/template', { method: 'POST', body }),
-  renderPreview: (body: Record<string, unknown>) => blobRequest('/api/print/render', { method: 'POST', body }),
+  renderPreview: async (body: Record<string, unknown>): Promise<RenderResult> => {
+    const response = await rawRequest('/api/print/render', { method: 'POST', body })
+    if (!response.ok) {
+      const text = await response.text()
+      let message = `HTTP ${response.status}`
+      try {
+        message = JSON.parse(text)?.error?.message ?? message
+      } catch {
+        /* giữ nguyên message mặc định */
+      }
+      throw new ApiError(message, response.status)
+    }
+    const width = Number(response.headers.get('X-Render-Width-Mm'))
+    const height = Number(response.headers.get('X-Render-Height-Mm'))
+    const pages = Number(response.headers.get('X-Render-Pages'))
+    return {
+      blob: await response.blob(),
+      layout: Number.isFinite(width) && width > 0 ? { widthMm: width, heightMm: height, pages: pages || 1 } : null,
+    }
+  },
 
   apiKeys: () => request<{ apiKeys: ApiKey[] }>('/api/apikeys'),
   createApiKey: (name: string) => request<ApiKey>('/api/apikeys', { method: 'POST', body: { name } }),

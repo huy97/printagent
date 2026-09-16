@@ -7,6 +7,7 @@ import {
   deleteTemplate,
 } from '../../render/templates.js';
 import { previewTemplate } from '../../core/printService.js';
+import { sendLayoutHeaders } from './print.js';
 import { seedTemplates, seedCatalog } from '../../render/seed.js';
 import { getConfig } from '../../core/config.js';
 import { localeFromRequest, LOCALES } from '../../i18n/index.js';
@@ -74,6 +75,7 @@ templatesRouter.post('/:id/preview', async (req, res, next) => {
       page: req.body?.page,
       engine: req.body?.engine,
     });
+    sendLayoutHeaders(res, rendered.layout);
     if (req.query.format === 'html' && rendered.html) {
       res.type('html').send(rendered.html);
       return;
