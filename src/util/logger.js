@@ -46,7 +46,7 @@ function write(level, scope, message, meta) {
     try {
       appendFileSync(logFile, `${line}\n`);
     } catch {
-      // không chặn luồng in vì lỗi ghi log
+      // never block printing because of a logging failure
     }
   }
 }

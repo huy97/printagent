@@ -1,7 +1,18 @@
 import Handlebars from 'handlebars';
 import QRCode from 'qrcode';
+import { getLocale } from '../i18n/index.js';
 
 const numberFormatCache = new Map();
+
+const LOCALE_DEFAULTS = {
+  en: { intl: 'en-US', currency: 'USD' },
+  vi: { intl: 'vi-VN', currency: 'VND' },
+};
+
+/** Helper defaults follow the agent locale; templates override them with locale= and currency=. */
+function defaults() {
+  return LOCALE_DEFAULTS[getLocale()] ?? LOCALE_DEFAULTS.en;
+}
 
 function formatter(locale, options) {
   const key = `${locale}:${JSON.stringify(options)}`;
@@ -11,7 +22,7 @@ function formatter(locale, options) {
   return numberFormatCache.get(key);
 }
 
-// Bảng độ rộng vạch/khoảng của Code 128, chỉ số 0-106 theo chuẩn, phần tử cuối là mã Stop.
+// Code 128 bar/space widths for symbols 0-106 per the spec; the last entry is the Stop pattern.
 const CODE128_WIDTHS = [
   '212222', '222122', '222221', '121223', '121322', '131222', '122213', '122312', '132212', '221213',
   '221312', '231212', '112232', '122132', '122231', '113222', '123122', '123221', '223211', '221132',
@@ -29,8 +40,8 @@ const CODE128_START_B = 104;
 const CODE128_STOP = 106;
 
 /**
- * Mã vạch Code 128 bộ B (ASCII in được) dạng SVG. Chiều rộng tính theo module nên
- * template co giãn bằng CSS mà vạch vẫn sắc nét khi in.
+ * Code 128 set B (printable ASCII) barcode as SVG. Widths are in modules, so templates
+ * can scale it with CSS and the bars stay crisp when printed.
  */
 function code128Svg(text, { height = 60, moduleWidth = 2, quietZone = 10, background = '#fff' } = {}) {
   const value = String(text ?? '');
@@ -82,14 +93,14 @@ function qrSvg(text, { size = 120, margin = 1, ecl = 'M' } = {}) {
 
 const ASCII_PUNCTUATION = { '\u2013': '-', '\u2014': '-', '\u2018': "'", '\u2019': "'", '\u201c': '"', '\u201d': '"', '\u2026': '...' };
 
-// Máy in nhiệt ở chế độ raw thường chỉ hiểu ASCII: bỏ dấu trước khi gửi.
+// Thermal printers in raw mode usually only understand ASCII: strip diacritics first.
 export function removeDiacritics(value) {
   return String(value ?? '')
     .replace(/[\u2013\u2014\u2018\u2019\u201c\u201d\u2026]/g, (char) => ASCII_PUNCTUATION[char])
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
+    .replace(/\u0111/g, 'd')
+    .replace(/\u0110/g, 'D')
     .replace(/[^\x20-\x7e\n\r\t]/g, '');
 }
 
@@ -148,7 +159,7 @@ const EN_UNITS = [
 const EN_TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
 const EN_SCALES = ['', ' thousand', ' million', ' billion', ' trillion'];
 
-/** Tên đơn vị tiền để đọc thành chữ: [số ít, số nhiều, đơn vị lẻ số ít, đơn vị lẻ số nhiều]. */
+/** Currency names for spelled-out amounts: [singular, plural, minor unit singular, minor unit plural]. */
 const CURRENCY_WORDS = {
   USD: ['US dollar', 'US dollars', 'cent', 'cents'],
   EUR: ['euro', 'euros', 'cent', 'cents'],
@@ -199,8 +210,8 @@ export function numberToEnglishWords(value) {
 }
 
 /**
- * Đọc số tiền thành chữ kèm tên đơn vị, dùng cho ô "bằng chữ" trên hoá đơn.
- * Phần lẻ chỉ đọc với đơn vị tiền có chia nhỏ (USD, EUR...), không áp cho VND.
+ * Spells out an amount with its currency name for the "amount in words" line on invoices.
+ * Minor units are read only for currencies that have them (USD, EUR...), never for VND.
  */
 export function amountToEnglishWords(value, currency = 'USD') {
   const number = Number(value);
@@ -220,15 +231,15 @@ export function amountToEnglishWords(value, currency = 'USD') {
 export function registerHelpers(handlebars = Handlebars) {
   handlebars.registerHelper('formatNumber', (value, options) => {
     const digits = options?.hash?.digits ?? 0;
-    const locale = options?.hash?.locale ?? 'vi-VN';
+    const locale = options?.hash?.locale ?? defaults().intl;
     const number = Number(value);
     if (!Number.isFinite(number)) return '';
     return formatter(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(number);
   });
 
   handlebars.registerHelper('currency', (value, options) => {
-    const currency = options?.hash?.currency ?? 'VND';
-    const locale = options?.hash?.locale ?? 'vi-VN';
+    const currency = options?.hash?.currency ?? defaults().currency;
+    const locale = options?.hash?.locale ?? defaults().intl;
     const number = Number(value);
     if (!Number.isFinite(number)) return '';
     return formatter(locale, {
@@ -240,7 +251,7 @@ export function registerHelpers(handlebars = Handlebars) {
 
   handlebars.registerHelper('formatDate', (value, options) => {
     const hash = options?.hash ?? {};
-    const locale = hash.locale ?? 'vi-VN';
+    const locale = hash.locale ?? defaults().intl;
     const date = value ? new Date(value) : new Date();
     if (Number.isNaN(date.getTime())) return '';
     const parts = ['weekday', 'year', 'month', 'day', 'hour', 'minute', 'second'].filter((key) => hash[key]);
@@ -258,7 +269,7 @@ export function registerHelpers(handlebars = Handlebars) {
   });
 
   handlebars.registerHelper('now', (options) => {
-    const locale = options?.hash?.locale ?? 'vi-VN';
+    const locale = options?.hash?.locale ?? defaults().intl;
     return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date());
   });
 
@@ -291,7 +302,7 @@ export function registerHelpers(handlebars = Handlebars) {
   handlebars.registerHelper('repeat', (char, length) => String(char ?? '').repeat(Number(length) || 0));
   handlebars.registerHelper('concat', (...args) => args.slice(0, -1).map((value) => String(value ?? '')).join(''));
   handlebars.registerHelper('ascii', (value) => removeDiacritics(value));
-  // Bill máy in nhiệt chỉ có một số cột cố định: nhãn bám trái, số bám phải.
+  // Thermal receipts have a fixed column count: label left-aligned, amount right-aligned.
   handlebars.registerHelper('cols', (left, right, width) => {
     const size = Number(width) || 32;
     const tail = String(right ?? '');
@@ -308,9 +319,9 @@ export function registerHelpers(handlebars = Handlebars) {
   );
 
   handlebars.registerHelper('amountWords', (value, options) => {
-    const locale = String(options?.hash?.locale ?? 'vi').toLowerCase();
-    if (locale.startsWith('en')) return amountToEnglishWords(value, options?.hash?.currency ?? 'USD');
-    return numberToVietnameseWords(value);
+    const locale = String(options?.hash?.locale ?? getLocale()).toLowerCase();
+    if (locale.startsWith('vi')) return numberToVietnameseWords(value);
+    return amountToEnglishWords(value, options?.hash?.currency ?? 'USD');
   });
 
   handlebars.registerHelper('barcode', (value, options) => {

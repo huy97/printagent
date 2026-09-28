@@ -44,7 +44,7 @@ export function SettingsTab() {
   const rerunSetup = async () => {
     setBusy(true)
     try {
-      // Cài đặt và service đọc cấu hình đã lưu, nên lưu trước để không chạy bằng cấu hình cũ.
+      // Setup and the service read the saved config, so save first to avoid running with stale values.
       if (dirty) await persist()
       const result = await runSetupUntilDone({ enableService: false })
       const warnings = result.steps.filter((step) => step.status === 'warn')

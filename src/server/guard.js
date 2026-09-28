@@ -22,7 +22,7 @@ function prune(now) {
   }
 }
 
-/** Trả về số mili giây còn bị chặn, 0 nếu được phép thử tiếp. */
+/** Returns the remaining block time in milliseconds, 0 when another attempt is allowed. */
 export function blockedFor(req) {
   const entry = attempts.get(clientKey(req));
   if (!entry?.blockedUntil) return 0;

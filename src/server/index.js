@@ -19,8 +19,8 @@ import * as printers from '../printers/index.js';
 import * as jobs from '../core/jobs.js';
 import { autoStartTunnel, stopTunnel } from '../core/tunnel.js';
 import { closeBrowser } from '../render/pdf.js';
-import { AppError } from '../util/errors.js';
-import { t, localeFromRequest, setLocale, LOCALES } from '../i18n/index.js';
+import { AppError, serializeError, toAppError } from '../util/errors.js';
+import { t, localeFromRequest, setLocale, LOCALES, DEFAULT_LOCALE } from '../i18n/index.js';
 
 const log = createLogger('server');
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -46,9 +46,9 @@ export function createApp() {
     if (allowed) {
       res.setHeader('access-control-allow-origin', origin);
       res.setHeader('vary', 'Origin');
-      res.setHeader('access-control-allow-headers', 'content-type,x-api-key,authorization,mcp-session-id');
+      res.setHeader('access-control-allow-headers', 'content-type,x-api-key,x-locale,authorization,mcp-session-id');
       res.setHeader('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
-      res.setHeader('access-control-expose-headers', 'mcp-session-id');
+      res.setHeader('access-control-expose-headers', 'mcp-session-id,content-language');
     }
     if (req.method === 'OPTIONS') {
       res.sendStatus(allowed ? 204 : 403);
@@ -76,7 +76,7 @@ export function createApp() {
     res.setHeader('content-type', 'text/plain; charset=utf-8');
     res.setHeader('content-language', locale);
     res.setHeader('cache-control', 'no-store');
-    res.sendFile(path.join(rootDir, locale === 'vi' ? 'llms.txt' : `llms.${locale}.txt`));
+    res.sendFile(path.join(rootDir, locale === DEFAULT_LOCALE ? 'llms.txt' : `llms.${locale}.txt`));
   });
 
   app.get('/openapi.json', (req, res) => {
@@ -84,7 +84,7 @@ export function createApp() {
     res.json(buildOpenApi(`${req.protocol}://${req.get('host')}`));
   });
 
-  // Điểm khám phá cho tác nhân AI: một request là biết agent có gì và đọc tiếp ở đâu.
+  // Discovery document for AI agents: one request tells what the agent offers and where to read next.
   app.get('/.well-known/printagent.json', (req, res) => {
     const base = `${req.protocol}://${req.get('host')}`;
     res.setHeader('cache-control', 'no-store');
@@ -115,8 +115,8 @@ export function createApp() {
       },
     }),
   );
-  // Fallback cho SPA: F5 hoặc mở trực tiếp một route của UI vẫn trả index.html.
-  // Request tới API, tới file tĩnh hoặc không nhận HTML vẫn đi tiếp để nhận 404 JSON.
+  // SPA fallback: reloading or deep-linking a UI route still serves index.html.
+  // API calls, static files and non-HTML requests fall through to the JSON 404.
   app.get('*', (req, res, next) => {
     if (/^\/(api|mcp)(\/|$)/.test(req.path) || path.extname(req.path) || !req.accepts('html')) {
       next();
@@ -128,29 +128,22 @@ export function createApp() {
 
   app.use((req, res) => {
     const locale = localeFromRequest(req);
+    res.setHeader('content-language', locale);
     res.status(404).json({
-      error: {
+      error: serializeError(new AppError('error.no_route', {
+        status: 404,
         code: 'not_found',
-        key: 'error.no_route',
-        message: t('error.no_route', { method: req.method, path: req.path }, locale),
-      },
+        params: { method: req.method, path: req.path },
+      }), locale),
     });
   });
 
   app.use((error, req, res, next) => {
-    const status = error instanceof AppError ? error.status : (error.status ?? 500);
-    if (status >= 500) log.error(`${req.method} ${req.path} -> ${error.message}`);
+    const appError = toAppError(error);
     const locale = localeFromRequest(req);
+    if (appError.status >= 500) log.error(`${req.method} ${req.path} -> ${error?.message ?? error}`);
     res.setHeader('content-language', locale);
-    res.status(status).json({
-      error: {
-        code: error.code ?? 'internal_error',
-        key: error instanceof AppError ? error.key : undefined,
-        message:
-          error instanceof AppError ? error.localize(locale) : (error.message ?? t('error.unknown', null, locale)),
-        details: error.details,
-      },
-    });
+    res.status(appError.status).json({ error: serializeError(appError, locale) });
   });
 
   return app;
@@ -174,12 +167,7 @@ export async function startServer({ port, host } = {}) {
   await new Promise((resolve, reject) => {
     server.once('error', (error) => {
       if (error.code === 'EADDRINUSE') {
-        reject(
-          new Error(
-            `Cổng ${listenPort} đang bị chiếm. Agent có thể đã chạy nền (printagent service status) ` +
-              `hoặc đổi cổng bằng: printagent start --port 7799`,
-          ),
-        );
+        reject(new AppError('error.port_in_use', { status: 409, code: 'port_in_use', params: { port: listenPort } }));
         return;
       }
       reject(error);
@@ -194,15 +182,15 @@ export async function startServer({ port, host } = {}) {
   cleanupTimer.unref?.();
 
   const local = `http://127.0.0.1:${listenPort}`;
-  log.info(`PrintAgent đang chạy tại ${local} (bind ${listenHost}:${listenPort})`);
+  log.info(`PrintAgent is running at ${local} (bind ${listenHost}:${listenPort})`);
   log.info(`Web UI: ${local}  |  REST: ${local}/api  |  WS: ws://127.0.0.1:${listenPort}/ws  |  MCP: ${local}/mcp`);
 
   autoStartTunnel().then((status) => {
-    if (status?.url) log.info(`Tunnel công khai: ${status.url}`);
+    if (status?.url) log.info(`Public tunnel: ${status.url}`);
   });
 
   const shutdown = async () => {
-    log.info('Đang tắt PrintAgent...');
+    log.info('Shutting down PrintAgent...');
     printers.stopAutoScan();
     clearInterval(cleanupTimer);
     await stopTunnel().catch(() => {});

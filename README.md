@@ -1,34 +1,34 @@
 # PrintAgent
 
-**Tiếng Việt** · [English](README.en.md)
+**English** · [Tiếng Việt](README.vi.md)
 
-Agent in ấn chạy trên máy local, mở API cho hệ thống khác gọi tới để in. Nhận file PDF in thẳng, hoặc nhận template + biến JSON rồi tự render PDF phía agent trước khi in.
+A print agent that runs on a local machine and exposes an API other systems can call to print. It prints a PDF file directly, or takes a template plus JSON variables and renders the PDF on the agent side before printing.
 
-Bốn cách điều khiển:
+Four ways to drive it:
 
-| Giao diện | Địa chỉ | Dùng cho |
+| Interface | Address | Used for |
 |---|---|---|
-| REST API | `http://<host>:7788/api` | Ứng dụng web, backend, POS |
-| WebSocket | `ws://<host>:7788/ws` | Ứng dụng cần nhận sự kiện job theo thời gian thực |
-| MCP | `http://<host>:7788/mcp` (HTTP) hoặc stdio | Claude Code, Claude Desktop, agent AI |
-| Web UI | `http://<host>:7788` | Cài đặt, quét máy in, quản lý template, xem hàng đợi |
+| REST API | `http://<host>:7788/api` | Web apps, backends, point-of-sale |
+| WebSocket | `ws://<host>:7788/ws` | Apps that need job events in real time |
+| MCP | `http://<host>:7788/mcp` (HTTP) or stdio | Claude Code, Claude Desktop, AI agents |
+| Web UI | `http://<host>:7788` | Setup, printer scanning, template management, queue view |
 
-## Yêu cầu
+## Requirements
 
 - Node.js >= 22
-- macOS/Linux: CUPS (`lp`, `lpstat` - có sẵn trên macOS)
-- Windows: khuyến nghị cài [SumatraPDF](https://www.sumatrapdfreader.org/) để in PDF im lặng
-- Chromium: `yarn install` tự tải bản Chrome của Puppeteer, wizard cài đặt sẽ tải lại nếu thiếu. Nếu máy đã có Chrome, có thể trỏ `render.chromePath` vào đó; agent cũng tự dò Chrome hệ thống khi bản Puppeteer lỗi.
+- macOS/Linux: CUPS (`lp`, `lpstat` - already present on macOS)
+- Windows: installing [SumatraPDF](https://www.sumatrapdfreader.org/) is recommended for silent PDF printing
+- Chromium: `yarn install` downloads Puppeteer's Chrome build, and the setup wizard downloads it again if it is missing. If the machine already has Chrome, point `render.chromePath` at it; the agent also detects a system Chrome when the Puppeteer build fails.
 
-Màn hình cài đặt trong web UI (và lệnh `printagent setup`) kiểm tra hết các yêu cầu trên, tự cài thứ còn thiếu, nên không cần dựng tay từng phần.
+The setup screen in the web UI (and the `printagent setup` command) checks all of the above and installs what is missing, so nothing has to be assembled by hand.
 
-## Cài đặt
+## Installation
 
-Quy trình giống nhau trên macOS, Windows và Linux.
+The procedure is the same on macOS, Windows and Linux.
 
-### Máy trắng, chưa có Node
+### Bare machine, no Node yet
 
-Một lệnh duy nhất. Không cần cài Node, không cần git, không cần quyền admin:
+A single command. No Node, no git, no admin rights required:
 
 ```bash
 # macOS / Linux
@@ -40,149 +40,149 @@ curl -fsSL https://raw.githubusercontent.com/huy97/printagent/main/install.sh | 
 irm https://raw.githubusercontent.com/huy97/printagent/main/install.ps1 | iex
 ```
 
-Script tự tải Node LTS bản portable (có đối chiếu SHA-256) vào `~/.printagent/runtime`, cài agent từ npm, tạo lệnh `printagent` rồi mở luôn màn hình cài đặt. Máy đã có Node >= 22 thì nó dùng luôn bản đó, không tải thêm.
+The script downloads a portable Node LTS build (verified against its SHA-256) into `~/.printagent/runtime`, installs the agent from npm, creates a `printagent` command and opens the setup screen. If the machine already has Node >= 22 it uses that one and downloads nothing.
 
-Mọi thứ nằm gọn trong `~/.printagent` (Windows: `%USERPROFILE%\.printagent`); gỡ cài đặt là xoá thư mục đó. Chạy lại chính lệnh trên để cập nhật.
+Everything lives under `~/.printagent` (Windows: `%USERPROFILE%\.printagent`); uninstalling means deleting that folder. Re-run the same command to update.
 
-Biến môi trường tuỳ chọn: `PRINTAGENT_LANG=en` cho thông báo tiếng Anh, `PRINTAGENT_NO_START=1` để cài xong không chạy ngay, `PRINTAGENT_HOME` để đổi thư mục cài, `PRINTAGENT_NODE_TRACK` để chọn nhánh Node khác (mặc định `v22.x`).
+Optional environment variables: `PRINTAGENT_LANG=vi` for Vietnamese output, `PRINTAGENT_NO_START=1` to install without starting, `PRINTAGENT_HOME` to install elsewhere, `PRINTAGENT_NODE_TRACK` to pick another Node line (default `v22.x`).
 
-### Máy đã có Node >= 22
+### Machine that already has Node >= 22
 
 ```bash
 npm install -g @hyydev/printagent
-printagent start      # agent chạy ngay, lần đầu tự mở giao diện cài đặt
+printagent start      # the agent starts immediately and opens the setup screen on first run
 ```
 
-Chạy một lần không cài đặt:
+Run it once without installing:
 
 ```bash
 npx @hyydev/printagent start
 ```
 
-Hoặc chạy từ mã nguồn:
+Or run it from source:
 
 ```bash
 git clone https://github.com/huy97/printagent.git
 cd printagent
 yarn install
-yarn start            # agent chạy ngay, lần đầu tự mở giao diện cài đặt
+yarn start            # the agent starts immediately and opens the setup screen on first run
 ```
 
-Giao diện web luôn lên trước. Lần đầu chạy, trình duyệt mở thẳng màn hình cài đặt: bấm **Cài đặt tự động** một lần, các bước chạy tuần tự và hiện tiến độ ngay trên màn hình. Không cần đụng tới terminal.
+The web interface always comes up first. On the first run the browser opens straight onto the setup screen: press **Install automatically** once, the steps run in order and the progress shows on screen. The terminal is never needed.
 
-Trình cài đặt tự sửa những gì sửa được, không bắt người dùng đi cài tay. Chỉ dừng khi một bước **bắt buộc** vẫn hỏng sau khi đã thử sửa; các bước còn lại chỉ cảnh báo và agent vẫn khởi động.
+The installer fixes whatever it can instead of asking the user to install things by hand. It only stops when a **required** step is still broken after the fix attempt; every other step just warns and the agent still starts.
 
-| Bước | Bắt buộc | Tự xử lý khi thiếu |
+| Step | Required | Handled automatically when missing |
 | --- | --- | --- |
-| Node.js >= 22 | có | cài qua nvm (macOS/Linux) hoặc winget/choco (Windows), rồi tự chạy lại bằng Node mới |
-| Thư mục `~/.printagent` | có | tạo thư mục, kiểm tra quyền ghi |
-| Driver in | không | Linux: cài `cups cups-client` rồi bật dịch vụ |
-| Máy in | không | dò máy in IPP qua mDNS (`dns-sd`/`avahi-browse`) và tự thêm vào CUPS |
-| Chromium | không | tải bản Puppeteer, không được thì cài Google Chrome qua brew/winget/apt |
-| SumatraPDF (Windows) | không | tải bản portable về `~/.printagent/tools` (không cần admin), lỗi thì thử winget/choco, rồi ghi vào `printing.sumatraPath` |
-| API key | có | tự tạo khoá `default` |
-| Tunnel | không | cài cloudflared/ngrok nếu `tunnel.provider` khác `none` |
-| Chạy nền | không | đăng ký dịch vụ nếu chọn |
+| Node.js >= 22 | yes | installed through nvm (macOS/Linux) or winget/choco (Windows), then re-run with the new Node |
+| The `~/.printagent` directory | yes | created, write permission checked |
+| Print driver | no | Linux: installs `cups cups-client` and starts the service |
+| Printer | no | discovers IPP printers over mDNS (`dns-sd`/`avahi-browse`) and adds them to CUPS |
+| Chromium | no | downloads the Puppeteer build, otherwise installs Google Chrome through brew/winget/apt |
+| SumatraPDF (Windows) | no | downloads the portable build into `~/.printagent/tools` (no admin rights), falls back to winget/choco, then writes `printing.sumatraPath` |
+| API key | yes | creates a `default` key |
+| Tunnel | no | installs cloudflared/ngrok when `tunnel.provider` is not `none` |
+| Background service | no | registers the service when chosen |
 
-Việc cài gói dùng trình quản lý gói có sẵn: `brew` trên macOS, `winget`/`choco` trên Windows, `apt-get`/`dnf`/`pacman`/`zypper`/`apk` trên Linux (dùng `sudo -n`, chỉ hỏi mật khẩu khi đang chạy trong terminal).
+Package installation uses whatever package manager is available: `brew` on macOS, `winget`/`choco` on Windows, `apt-get`/`dnf`/`pacman`/`zypper`/`apk` on Linux (through `sudo -n`, only prompting for a password when running in a terminal).
 
-Chạy không tương tác (CI, script cài đặt hàng loạt):
+Non-interactive runs (CI, mass installation scripts):
 
 ```bash
-node bin/printagent.js setup --service        # đăng ký luôn dịch vụ nền
-node bin/printagent.js setup --no-service     # bỏ qua dịch vụ nền
-node bin/printagent.js setup --no-download    # không tự tải Chromium
-node bin/printagent.js start --no-open        # không tự mở trình duyệt
+node bin/printagent.js setup --service        # also register the background service
+node bin/printagent.js setup --no-service     # skip the background service
+node bin/printagent.js setup --no-download    # do not download Chromium
+node bin/printagent.js start --no-open        # do not open the browser
 ```
 
-Lệnh `setup` chạy đúng các bước đó trong terminal và trả mã thoát 1 khi một bước bắt buộc thất bại, nên dùng được trong script. Lệnh `start` không bao giờ chặn: agent lên trước, phần cài đặt còn thiếu để người dùng bấm trên web UI.
+The `setup` command runs exactly those steps in the terminal and exits with code 1 when a required step fails, so it works inside a script. The `start` command never blocks: the agent comes up first and whatever setup is left is a button away in the web UI.
 
-Địa chỉ giao diện là `http://127.0.0.1:7788`. Dữ liệu (config, template, job, log) nằm ở `~/.printagent` (đổi bằng biến môi trường `PRINTAGENT_DATA_DIR`), kết quả lần setup gần nhất nằm ở `~/.printagent/setup.json` (xem bằng `printagent doctor`).
+The interface lives at `http://127.0.0.1:7788`. Data (config, templates, jobs, logs) is stored under `~/.printagent` (change it with the `PRINTAGENT_DATA_DIR` environment variable); the result of the last setup run is in `~/.printagent/setup.json` (readable with `printagent doctor`).
 
-### Lệnh CLI
+### CLI commands
 
 ```bash
 node bin/printagent.js setup [--service|--no-service|--no-download]
 node bin/printagent.js start [--port 7788] [--host 0.0.0.0] [--no-open]
 node bin/printagent.js service [status|install|uninstall]
-node bin/printagent.js doctor                   # kết quả kiểm tra lần setup gần nhất
-node bin/printagent.js printers                 # liệt kê máy in đang kết nối
-node bin/printagent.js test --printer "Ten_May_In"
-node bin/printagent.js key                      # xem API key
-node bin/printagent.js config set-default-printer "Ten_May_In"
-node bin/printagent.js tunnel check             # kiểm tra cloudflared/ngrok
-node bin/printagent.js mcp                      # chạy MCP server qua stdio
+node bin/printagent.js doctor                   # result of the last setup run
+node bin/printagent.js printers                 # list the connected printers
+node bin/printagent.js test --printer "Printer_Name"
+node bin/printagent.js key                      # show the API key
+node bin/printagent.js config set-default-printer "Printer_Name"
+node bin/printagent.js tunnel check              # check cloudflared/ngrok
+node bin/printagent.js mcp                      # run the MCP server over stdio
 ```
 
-## Ngôn ngữ
+## Language
 
-Agent nói được tiếng Việt và tiếng Anh.
+The agent speaks Vietnamese and English.
 
-- **Giao diện web**: nút đổi ngữ trên thanh tiêu đề, cạnh nút Làm mới. Lựa chọn lưu riêng theo từng trình duyệt.
-- **Màn hình cài đặt lần đầu**: nút đổi ngữ ngay góc trên bên trái. Ngôn ngữ chọn ở đây trở thành `agent.locale` và quyết định bộ template mẫu được tạo.
-- **Wizard trong terminal**: `printagent setup` hỏi ngôn ngữ trước tiên rồi lưu vào cấu hình.
-- **API**: mỗi request chọn ngôn ngữ theo header `x-locale`, query `?lang=`, header `accept-language`, rồi `agent.locale` trong cấu hình (mặc định `vi`). Response kèm header `content-language`, mỗi lỗi kèm trường `key` ổn định để client tự dịch nếu muốn.
-- **CLI, log và màn cài đặt trong terminal**: biến môi trường `PRINTAGENT_LANG`, không có thì theo `agent.locale` (đổi được trong tab Cài đặt).
-- **Tài liệu**: [README.en.md](README.en.md) và [llms.en.txt](llms.en.txt); agent đang chạy phục vụ `GET /llms.txt?lang=en`.
+- **Web UI**: the language button in the title bar, next to Refresh. The choice is stored per browser.
+- **First-run setup screen**: a language button in the top left corner. The language picked there becomes `agent.locale` and decides which starter template set is created.
+- **Terminal wizard**: `printagent setup` asks for the language first and stores the answer in the configuration.
+- **API**: each request picks its language from the `x-locale` header, the `?lang=` query, the `accept-language` header, then `agent.locale` from the configuration (default `en`). Responses carry a `content-language` header, and every error also carries a stable `key` plus `params` so a client can translate it itself.
+- **CLI, logs and the terminal setup screen**: the `PRINTAGENT_LANG` environment variable, falling back to `agent.locale` (changeable in the Settings tab).
+- **Documentation**: this file and [llms.txt](llms.txt); Vietnamese versions are [README.vi.md](README.vi.md) and [llms.vi.txt](llms.vi.txt), and a running agent serves `GET /llms.txt?lang=vi`.
 
 ```bash
-PRINTAGENT_LANG=en node bin/printagent.js printers
-curl -H "x-locale: en" http://127.0.0.1:7788/api/printers
+PRINTAGENT_LANG=vi node bin/printagent.js printers
+curl -H "x-locale: vi" http://127.0.0.1:7788/api/printers
 ```
 
-## Xác thực
+## Authentication
 
-Agent sinh sẵn một API key khi chạy lần đầu (`node bin/printagent.js key`). Gửi kèm mỗi request:
+The agent creates an API key on the first run (`node bin/printagent.js key`). Send it with every request:
 
 ```
 x-api-key: pa_xxx
 ```
-hoặc `Authorization: Bearer pa_xxx`, hoặc `?apiKey=pa_xxx` (dùng cho WebSocket).
+or `Authorization: Bearer pa_xxx`, or `?apiKey=pa_xxx` (used by the WebSocket).
 
-Mặc định request từ chính máy đang chạy agent được miễn key (`auth.allowLocalhostWithoutKey`). Ngoại lệ này chỉ áp dụng khi thoả **đồng thời** bốn điều kiện, mỗi điều kiện độc lập nhau nên phá được một cái vẫn chưa đủ:
+By default requests coming from the machine running the agent skip the key (`auth.allowLocalhostWithoutKey`). That exception applies only when **all four** conditions hold, and each one is independent, so defeating a single check is not enough:
 
-- kết nối TCP tới từ địa chỉ loopback (`127.0.0.1`, `::1`);
-- header `Host` là loopback - request qua tunnel luôn mang tên miền công khai nên bị loại ngay, kể cả khi kẻ tấn công cố tình không gửi header proxy nào;
-- không có header proxy nào (`cf-connecting-ip`, `x-forwarded-for`, `x-real-ip`, `cf-ray`, ...);
-- `Sec-Fetch-Site` là `same-origin` hoặc `none`, và `Origin` (nếu có) là chính agent - chặn kịch bản một website bất kỳ gọi ngầm tới agent trên máy người dùng, kể cả bằng thẻ `<img>`/`<script>` vốn không gửi `Origin`.
+- the TCP connection comes from a loopback address (`127.0.0.1`, `::1`);
+- the `Host` header is loopback - a request through a tunnel always carries the public hostname and is rejected right there, even when the attacker deliberately sends no proxy header at all;
+- no proxy header is present (`cf-connecting-ip`, `x-forwarded-for`, `x-real-ip`, `cf-ray`, ...);
+- `Sec-Fetch-Site` is `same-origin` or `none`, and `Origin` (when present) is the agent itself - this blocks any random website from quietly calling the agent on a user's machine, including through `<img>`/`<script>` tags that send no `Origin`.
 
-Ba header trên do trình duyệt tự đặt và trang web không sửa được; công cụ dòng lệnh trên chính máy local không gửi chúng nên vẫn được miễn key như trước.
+Browsers set those three headers themselves and a web page cannot forge them; command line tools on the local machine do not send them at all, so they keep skipping the key as before.
 
-Các thiết lập quyết định binary được agent chạy hoặc tắt xác thực (`render.chromePath`, `printing.sumatraPath`, `printing.allowLocalFilePath`, `printing.allowedFileRoots`, `auth.enabled`, `auth.allowLocalhostWithoutKey`, `tunnel.*.binPath`) chỉ sửa được từ máy local; request từ xa gửi các trường này sẽ bị bỏ qua và liệt kê trong `rejectedFields`.
+Settings that decide which binary the agent runs, or that turn authentication off (`render.chromePath`, `printing.sumatraPath`, `printing.allowLocalFilePath`, `printing.allowedFileRoots`, `auth.enabled`, `auth.allowLocalhostWithoutKey`, `tunnel.*.binPath`), can only be changed from the local machine; a remote request carrying those fields has them ignored and listed in `rejectedFields`.
 
-### Giới hạn nguồn tài liệu
+### Document source limits
 
-- `filePath` (in file có sẵn trên máy chạy agent) mặc định **tắt**. Bật bằng `printing.allowLocalFilePath = true` và nên khai báo `printing.allowedFileRoots` để giới hạn thư mục.
-- `url` chỉ nhận `http`/`https`, chặn địa chỉ loopback và dải mạng nội bộ (bật lại bằng `printing.allowPrivateNetworkUrl`), giới hạn dung lượng theo `printing.maxDownloadMb` (mặc định 64MB).
-- CORS mặc định không cho phép origin nào; thêm domain vào `server.corsOrigins` nếu web app của bạn gọi trực tiếp từ trình duyệt. WebSocket cũng áp dụng cùng danh sách này, kèm ngoại lệ cho chính trang do agent phục vụ (kể cả khi mở qua tunnel, vì khi đó `Origin` trùng `Host`).
+- `filePath` (printing a file already on the agent machine) is **off** by default. Turn it on with `printing.allowLocalFilePath = true` and declare `printing.allowedFileRoots` to limit the folders.
+- `url` accepts `http`/`https` only, blocks loopback and private network ranges (re-enable with `printing.allowPrivateNetworkUrl`), and caps the size at `printing.maxDownloadMb` (default 64MB).
+- CORS allows no origin by default; add your domain to `server.corsOrigins` if your web app calls the agent straight from the browser. The WebSocket uses the same list, plus an exception for the page the agent itself serves (including through a tunnel, where `Origin` matches `Host`).
 
-### Bảo vệ khi mở ra Internet
+### Protection when exposed to the Internet
 
-- Sai API key 10 lần trong một phút thì địa chỉ đó bị chặn 5 phút, trả HTTP 429 kèm `retry-after`. Bộ đếm dùng chung cho cả REST và WebSocket, nên không dò key được bằng cách mở lại kết nối WebSocket. Địa chỉ lấy từ `cf-connecting-ip`/`x-real-ip`/`x-forwarded-for` nên mỗi client qua tunnel bị tính riêng; một lần xác thực đúng sẽ xoá bộ đếm. Request từ máy local không bị tính.
-- Không bật được tunnel khi `auth.enabled = false` hoặc khi chưa có API key nào - agent từ chối với thông báo nêu rõ việc cần làm.
-- Không tắt được `auth.enabled` trong lúc tunnel đang chạy; phải dừng tunnel trước.
-- Mọi phản hồi đều kèm `x-content-type-options: nosniff`, `referrer-policy: no-referrer`, `x-frame-options: SAMEORIGIN`.
-- Không có rate limit cho request đã xác thực đúng: nếu cần, chặn ở tầng Cloudflare (WAF, Access) hoặc reverse proxy.
+- Ten wrong API keys within a minute block that address for five minutes with HTTP 429 and a `retry-after` header. REST and the WebSocket share one counter, so reopening a WebSocket connection is not a way around it. The address comes from `cf-connecting-ip`/`x-real-ip`/`x-forwarded-for`, so each client behind a tunnel is counted separately, and one successful authentication clears the counter. Requests from the local machine are never counted.
+- The tunnel refuses to start while `auth.enabled = false` or while no API key exists, with a message saying what to fix.
+- `auth.enabled` cannot be turned off while the tunnel is running; stop the tunnel first.
+- Every response carries `x-content-type-options: nosniff`, `referrer-policy: no-referrer` and `x-frame-options: SAMEORIGIN`.
+- Authenticated requests are not rate limited: throttle them at the Cloudflare layer (WAF, Access) or at a reverse proxy if you need it.
 
-## Tài liệu cho tác nhân AI
+## Documentation for AI agents
 
-Agent tự mô tả mình qua ba địa chỉ, đều không cần API key nên tác nhân đọc được ngay khi vừa kết nối:
+The agent describes itself through three addresses, none of which need an API key, so an agent can read them as soon as it connects:
 
-| Địa chỉ | Nội dung |
+| Address | Content |
 | --- | --- |
-| `GET /.well-known/printagent.json` | Điểm khám phá: phiên bản, nơi đọc tài liệu, ba điểm truy cập REST/WebSocket/MCP, cách xác thực |
-| `GET /openapi.json` | Đặc tả OpenAPI 3.1 của cả 36 endpoint REST, nạp thẳng vào công cụ sinh client hoặc khai báo tool |
-| `GET /llms.txt` | Bản rút gọn dạng văn bản, cũng nằm sẵn trong repo tại [llms.txt](llms.txt) và [llms.en.txt](llms.en.txt) |
+| `GET /.well-known/printagent.json` | Discovery endpoint: version, where to read the docs, the three REST/WebSocket/MCP entry points, how to authenticate |
+| `GET /openapi.json` | OpenAPI 3.1 specification of all 36 REST endpoints, ready to feed a client generator or a tool definition |
+| `GET /llms.txt` | The condensed plain-text version; also in the repo as [llms.txt](llms.txt) and [llms.vi.txt](llms.vi.txt) |
 
-Cách nhanh nhất để một tác nhân dùng được PrintAgent là cắm MCP (xem mục [MCP](#mcp)): 13 tool đã kèm mô tả và schema, không cần đọc tài liệu REST.
+The fastest way for an agent to use PrintAgent is to plug in MCP (see [MCP](#mcp)): the 13 tools already carry descriptions and schemas, no REST documentation needed.
 
-Nếu tích hợp qua REST, trình tự gợi ý: đọc `/.well-known/printagent.json`, `GET /api/printers` lấy tên máy in, `GET /api/templates/:id` đọc `sampleData` để biết khuôn dữ liệu, rồi `POST /api/print/template`.
+For a REST integration, the suggested order is: read `/.well-known/printagent.json`, `GET /api/printers` for printer names, `GET /api/templates/:id` and read `sampleData` to learn the data shape, then `POST /api/print/template`.
 
 ## REST API
 
-### In file PDF
+### Printing a PDF file
 
-`POST /api/print/pdf` - nhận một trong ba nguồn: `content` (base64), `url`, `filePath`, hoặc upload multipart field `file`.
+`POST /api/print/pdf` - takes one of three sources: `content` (base64), `url`, `filePath`, or a multipart upload in the `file` field.
 
 ```bash
 # base64
@@ -190,19 +190,19 @@ curl -X POST http://127.0.0.1:7788/api/print/pdf \
   -H "x-api-key: $KEY" -H "content-type: application/json" \
   -d '{"content":"JVBERi0xLj...","printer":"HP_LaserJet","copies":2,"wait":true}'
 
-# upload file
+# upload a file
 curl -X POST http://127.0.0.1:7788/api/print/pdf \
   -H "x-api-key: $KEY" -F file=@invoice.pdf -F printer=HP_LaserJet
 
-# tải từ URL rồi in
+# download from a URL, then print
 curl -X POST http://127.0.0.1:7788/api/print/pdf \
   -H "x-api-key: $KEY" -H "content-type: application/json" \
   -d '{"url":"https://example.com/invoice.pdf"}'
 ```
 
-Tuỳ chọn in: `copies`, `title`, `options.duplex` (`none|long|short`), `options.paperSize`, `options.orientation`, `options.fitToPage`, `options.raw`, `options.extraOptions` (mảng tham số `-o` của CUPS). Thêm `"wait": true` để API chờ in xong rồi mới trả về.
+Print options: `copies`, `title`, `options.duplex` (`none|long|short`), `options.paperSize`, `options.orientation`, `options.fitToPage`, `options.raw`, `options.extraOptions` (an array of CUPS `-o` parameters, each written as `"key=value"`; Linux/macOS only, ignored on Windows). Add `"wait": true` to make the API return only once printing has finished.
 
-### In từ template + biến JSON
+### Printing from a template + JSON variables
 
 `POST /api/print/template`
 
@@ -211,52 +211,52 @@ curl -X POST http://127.0.0.1:7788/api/print/template \
   -H "x-api-key: $KEY" -H "content-type: application/json" \
   -d '{
     "templateId": "invoice-a4",
-    "data": { "code": "HD001", "shop": {"name":"Cửa hàng ABC"}, "items": [{"name":"Cà phê","qty":2,"price":35000}], "total": 70000 },
+    "data": { "code": "HD001", "shop": {"name":"ABC Store"}, "items": [{"name":"Coffee","qty":2,"price":35000}], "total": 70000 },
     "printer": "HP_LaserJet",
     "copies": 1,
     "wait": true
   }'
 ```
 
-Có thể truyền template inline thay cho `templateId`:
+A template can be passed inline instead of `templateId`:
 
 ```json
 { "template": "<h1>{{code}}</h1>", "engine": "html", "data": { "code": "HD001" } }
 ```
 
-### Render thử, không in
+### Rendering without printing
 
-`POST /api/print/render` trả về PDF (thêm `?format=html` để xem HTML, `?format=base64` để nhận JSON).
+`POST /api/print/render` returns the PDF (add `?format=html` to see the HTML, `?format=base64` to get JSON).
 
-### Các endpoint khác
+### Other endpoints
 
-| Method | Path | Mô tả |
+| Method | Path | Description |
 |---|---|---|
-| GET | `/api/health` | Trạng thái agent (không cần key) |
-| GET | `/api/info` | Thông tin chi tiết, kiểm tra renderer |
-| GET | `/api/printers?refresh=1` | Danh sách máy in (quét lại nếu `refresh=1`) |
-| POST | `/api/printers/scan` | Quét lại máy in |
-| GET | `/api/printers/:name` | Chi tiết + tuỳ chọn của máy in |
-| POST | `/api/printers/:name/default` | Đặt máy in mặc định |
-| POST | `/api/printers/:name/test` | In trang thử |
-| GET/POST | `/api/templates` | Danh sách / tạo template |
-| GET/PUT/DELETE | `/api/templates/:id` | Xem / sửa / xoá template |
-| POST | `/api/templates/:id/preview` | Render template thành PDF |
-| GET | `/api/templates/seeds` | Danh sách mẫu trong bộ có sẵn (`?lang=vi\|en`) |
-| POST | `/api/templates/seed` | Tạo bộ mẫu của một ngôn ngữ (`{"locale":"en"}`) |
-| GET | `/api/jobs` | Danh sách job (`?status=`, `?limit=`) |
-| GET | `/api/jobs/:id` | Chi tiết job |
-| GET | `/api/jobs/:id/file` | Tải file đã in |
-| POST | `/api/jobs/:id/cancel` | Huỷ job |
-| POST | `/api/jobs/:id/retry` | In lại job |
-| GET/PUT | `/api/settings` | Xem / sửa cấu hình |
-| GET/POST/DELETE | `/api/apikeys` | Quản lý API key |
-| GET | `/api/tunnel` | Trạng thái + công cụ tunnel |
-| POST | `/api/tunnel/start`, `/api/tunnel/stop` | Bật / tắt tunnel |
-| GET | `/api/setup` | Kết quả cài đặt ban đầu + trạng thái dịch vụ nền |
-| POST | `/api/setup/run` | Chạy cài đặt trong nền, trả tiến độ ngay (chỉ từ máy local) |
-| GET | `/api/setup/progress` | Tiến độ lần chạy hiện tại: bước đang chạy, log, kết quả (chỉ từ máy local) |
-| POST | `/api/setup/service` | `{"action":"install"\|"uninstall"}` (chỉ từ máy local) |
+| GET | `/api/health` | Agent status (no key needed) |
+| GET | `/api/info` | Detailed information, renderer check |
+| GET | `/api/printers?refresh=1` | Printer list (rescans when `refresh=1`) |
+| POST | `/api/printers/scan` | Rescan printers |
+| GET | `/api/printers/:name` | Printer details and options |
+| POST | `/api/printers/:name/default` | Set the default printer |
+| POST | `/api/printers/:name/test` | Print a test page |
+| GET/POST | `/api/templates` | List / create a template |
+| GET/PUT/DELETE | `/api/templates/:id` | Read / update / delete a template |
+| POST | `/api/templates/:id/preview` | Render a template into a PDF |
+| GET | `/api/templates/seeds` | List the templates in a starter set (`?lang=vi\|en`) |
+| POST | `/api/templates/seed` | Create the starter set for a language (`{"locale":"en"}`) |
+| GET | `/api/jobs` | Job list (`?status=`, `?limit=`) |
+| GET | `/api/jobs/:id` | Job details |
+| GET | `/api/jobs/:id/file` | Download the printed file |
+| POST | `/api/jobs/:id/cancel` | Cancel a job |
+| POST | `/api/jobs/:id/retry` | Print a job again |
+| GET/PUT | `/api/settings` | Read / update the configuration |
+| GET/POST/DELETE | `/api/apikeys` | Manage API keys |
+| GET | `/api/tunnel` | Tunnel status and tooling |
+| POST | `/api/tunnel/start`, `/api/tunnel/stop` | Start / stop the tunnel |
+| GET | `/api/setup` | Initial setup result and background service status |
+| POST | `/api/setup/run` | Run setup in the background, returning progress immediately (local machine only) |
+| GET | `/api/setup/progress` | Progress of the current run: current step, logs, result (local machine only) |
+| POST | `/api/setup/service` | `{"action":"install"\|"uninstall"}` (local machine only) |
 
 ## WebSocket
 
@@ -275,9 +275,9 @@ ws.onopen = () => {
 ws.onmessage = (event) => console.log(JSON.parse(event.data));
 ```
 
-Lệnh hỗ trợ: `ping`, `status`, `printers.list`, `printers.scan`, `templates.list`, `templates.get`, `render.template`, `print.pdf`, `print.template`, `jobs.list`, `job.get`, `job.cancel`, `tunnel.status`, `subscribe`.
+Supported commands: `ping`, `status`, `printers.list`, `printers.scan`, `templates.list`, `templates.get`, `render.template`, `print.pdf`, `print.template`, `jobs.list`, `job.get`, `job.cancel`, `tunnel.status`, `subscribe`.
 
-Sự kiện đẩy về (`{"type":"event"}`): `job.created`, `job.updated`, `printer.changed`, `tunnel.changed`, `log`. Chọn kênh nhận bằng `{"type":"subscribe","payload":{"events":["job","printer","tunnel","log"]}}`.
+Pushed events (`{"type":"event"}`): `job.created`, `job.updated`, `printer.changed`, `tunnel.changed`, `log`. Choose the channels with `{"type":"subscribe","payload":{"events":["job","printer","tunnel","log"]}}`.
 
 ## MCP
 
@@ -294,7 +294,7 @@ claude mcp add --transport http printagent http://127.0.0.1:7788/mcp --header "x
   "mcpServers": {
     "printagent": {
       "command": "node",
-      "args": ["/duong/dan/printagent/bin/printagent.js", "mcp"],
+      "args": ["/path/to/printagent/bin/printagent.js", "mcp"],
       "env": {
         "PRINTAGENT_URL": "http://127.0.0.1:7788",
         "PRINTAGENT_API_KEY": "pa_xxx"
@@ -304,134 +304,134 @@ claude mcp add --transport http printagent http://127.0.0.1:7788/mcp --header "x
 }
 ```
 
-Chế độ stdio mặc định gọi tới agent đang chạy. Thêm `--standalone` nếu muốn MCP tự xử lý in mà không cần agent chạy nền.
+The stdio mode calls the running agent by default. Add `--standalone` if MCP should handle printing itself without a background agent.
 
-Tool: `list_printers`, `agent_status`, `print_pdf`, `print_template`, `render_template`, `list_templates`, `get_template`, `save_template`, `delete_template`, `list_jobs`, `get_job`, `cancel_job`, `print_test_page`.
+Tools: `list_printers`, `agent_status`, `print_pdf`, `print_template`, `render_template`, `list_templates`, `get_template`, `save_template`, `delete_template`, `list_jobs`, `get_job`, `cancel_job`, `print_test_page`. Their titles and descriptions follow the agent language.
 
-## Template
+## Templates
 
-Template dùng [Handlebars](https://handlebarsjs.com/). Hai kiểu:
+Templates use [Handlebars](https://handlebarsjs.com/). Two kinds:
 
-- `html`: render HTML thành PDF bằng Chromium rồi gửi máy in. Dùng cho hoá đơn A4, bill 80mm.
-- `text`: render text thuần, đóng gói lệnh ESC/POS (init, cut, mở két) và gửi thẳng máy in ở chế độ raw.
+- `html`: renders HTML into a PDF with Chromium, then sends it to the printer. Used for A4 invoices and 80mm receipts.
+- `text`: renders plain text, wraps it in ESC/POS commands (init, cut, open drawer) and sends it straight to the printer in raw mode.
 
-Agent **không** tự tạo template khi khởi động. Màn hình cài đặt hỏi trước, chỉ tạo khi bạn đồng ý; tạo sau bất cứ lúc nào bằng nút **Bộ mẫu** ở tab Template, `POST /api/templates/seed`, hoặc `printagent setup --templates`.
+The agent does **not** create templates on startup. The setup screen asks first and only creates them if you agree; create them later at any time with the **Starter set** button on the Templates tab, `POST /api/templates/seed`, or `printagent setup --templates`.
 
-Có hai bộ mẫu, mỗi bộ 6 template, tạo theo ngôn ngữ đang chọn ở màn cài đặt.
+There are two sets of 6 templates each, created in the language selected on the setup screen.
 
-Bộ tiếng Việt:
+The English set, in USD with `en-US` formatting:
 
-| Id | Khổ | Dùng cho |
+| Id | Size | Used for |
 | --- | --- | --- |
-| `invoice-a4` | A4 | Hoá đơn bán hàng đơn giản |
-| `bill-80mm` | 80mm | Bill máy in nhiệt, render qua PDF |
-| `receipt-escpos` | raw | Bill text thuần gửi thẳng máy in nhiệt |
-| `vat-invoice-a4` | A4 | Hoá đơn GTGT, bản thể hiện hoá đơn điện tử |
-| `pos-invoice-80mm` | 80mm | Hoá đơn điện tử khởi tạo từ máy tính tiền |
-| `cash-receipt-a5` | A5 | Phiếu thu tiền mặt mẫu 01-TT |
+| `invoice-a4-en` | A4 | Sales invoice with QR code and amount in words |
+| `bill-80mm-en` | 80mm | Thermal receipt rendered through PDF |
+| `receipt-escpos-en` | raw | ESC/POS receipt, plain text |
+| `tax-invoice-a4-en` | A4 | Tax invoice: VAT numbers on both sides, per-line tax rate, signature blocks |
+| `pos-receipt-80mm-en` | 80mm | POS tax receipt with amount paid and change |
+| `cash-receipt-a5-en` | A5 | Cash receipt: book and receipt number, five signature blocks |
 
-Bộ tiếng Anh, dùng USD và định dạng `en-US`:
+The Vietnamese set:
 
-| Id | Khổ | Dùng cho |
+| Id | Size | Used for |
 | --- | --- | --- |
-| `invoice-a4-en` | A4 | Sales invoice, có QR và tiền bằng chữ |
-| `bill-80mm-en` | 80mm | Thermal receipt, render qua PDF |
-| `receipt-escpos-en` | raw | ESC/POS receipt, text thuần |
-| `tax-invoice-a4-en` | A4 | Tax invoice, VAT hai bên, thuế suất theo dòng, khối chữ ký |
-| `pos-receipt-80mm-en` | 80mm | POS tax receipt, tiền khách đưa và tiền thối |
-| `cash-receipt-a5-en` | A5 | Cash receipt, số quyển/số phiếu, 5 ô chữ ký |
+| `invoice-a4` | A4 | Simple sales invoice |
+| `bill-80mm` | 80mm | Thermal printer receipt rendered through PDF |
+| `receipt-escpos` | raw | Plain text receipt sent straight to a thermal printer |
+| `vat-invoice-a4` | A4 | VAT invoice, printed representation of an e-invoice |
+| `pos-invoice-80mm` | 80mm | E-invoice issued from a cash register |
+| `cash-receipt-a5` | A5 | Cash receipt, Vietnamese form 01-TT |
 
-Hai bộ dùng id khác nhau nên cài cả hai trên cùng một máy được; tạo lại không ghi đè mẫu đã có.
+The two sets use different ids, so both can live on the same machine; creating a set again never overwrites an existing template.
 
-Ba mẫu cuối của bộ tiếng Việt bám theo quy định hiện hành: Nghị định 123/2020/NĐ-CP (sửa đổi tại Nghị định 70/2025/NĐ-CP) và Thông tư 78/2021/TT-BTC cho hoá đơn điện tử, Thông tư 133/2016/TT-BTC cho phiếu thu. Chúng dùng một thuế suất chung cho cả hoá đơn (`vatRate`, `vatAmount`); hoá đơn nhiều thuế suất cần sửa lại bảng tổng hợp. Bộ tiếng Anh là mẫu thương mại thông dụng, không gắn với biểu mẫu pháp lý của nước nào.
+The last three Vietnamese ones follow current Vietnamese regulations: Decree 123/2020/ND-CP (amended by Decree 70/2025/ND-CP) and Circular 78/2021/TT-BTC for e-invoices, Circular 133/2016/TT-BTC for cash receipts. They use a single tax rate for the whole invoice (`vatRate`, `vatAmount`); an invoice with several rates needs the summary table reworked. The English set is a plain commercial layout, not tied to any country's statutory form.
 
-Helper có sẵn: `currency`, `formatNumber`, `formatDate`, `vndWords`, `enWords`, `amountWords`, `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (căn nhãn trái - số phải theo số cột), `ascii` (bỏ dấu tiếng Việt cho máy in nhiệt), `json`, `qr`, `qrDataUri`.
+Built-in helpers: `currency`, `formatNumber`, `formatDate`, `vndWords`, `enWords`, `amountWords`, `now`, `add`, `sub`, `mul`, `div`, `inc`, `sum`, `eq`, `ne`, `gt`, `lt`, `and`, `or`, `upper`, `lower`, `padStart`, `padEnd`, `repeat`, `concat`, `cols` (label left, number right, aligned to a column count), `ascii` (strips Vietnamese diacritics for thermal printers), `json`, `qr`, `qrDataUri`.
 
-- `{{vndWords 8855000}}` đọc số tiền thành chữ: `Tám triệu tám trăm năm mươi lăm nghìn`.
-- `{{enWords 979.76 currency="USD"}}` đọc bằng tiếng Anh kèm đơn vị: `Nine hundred and seventy-nine US dollars and seventy-six cents only`.
-- `{{amountWords total locale="en" currency="USD"}}` chọn cách đọc theo ngôn ngữ, tiện khi một template dùng cho cả hai.
-- `{{formatDate date day="2-digit" month="2-digit" year="numeric"}}` lấy riêng ngày tháng năm; không truyền thành phần nào thì dùng `dateStyle`/`timeStyle`.
+- `currency`, `formatNumber`, `formatDate`, `now` and `amountWords` follow the agent language unless the template passes `locale=` / `currency=`: `en-US` and `USD` for English, `vi-VN` and `VND` for Vietnamese. The bundled templates always pass them explicitly, so they render the same whatever the agent language.
+- `{{vndWords 8855000}}` spells an amount out in Vietnamese: `Tám triệu tám trăm năm mươi lăm nghìn`.
+- `{{enWords 979.76 currency="USD"}}` spells it out in English with the currency name: `Nine hundred and seventy-nine US dollars and seventy-six cents only`.
+- `{{amountWords total locale="en" currency="USD"}}` picks the spelling by language, handy when one template serves both.
+- `{{formatDate date day="2-digit" month="2-digit" year="numeric"}}` picks individual date parts; with no parts given it uses `dateStyle`/`timeStyle`.
 
 ```handlebars
 <h1>{{shop.name}}</h1>
 {{#each items}}
   <div>{{inc @index}}. {{name}} - {{currency (mul qty price)}}</div>
 {{/each}}
-<p>Tổng: {{currency total}}</p>
+<p>Total: {{currency total}}</p>
 {{qr code size=90}}
 ```
 
-Cấu hình trang cho template `html`: `page.format` (A4, A5, Letter...), `page.width`/`page.height` (khổ tuỳ chỉnh như 80mm), `page.landscape`, `page.marginTop|marginRight|marginBottom|marginLeft`.
+Page settings for an `html` template: `page.format` (A4, A5, Letter...), `page.width`/`page.height` (custom sizes such as 80mm), `page.landscape`, `page.marginTop|marginRight|marginBottom|marginLeft`.
 
-Đặt `page.height = "auto"` cùng `page.width` cho giấy cuộn: agent đo chiều cao nội dung rồi cắt đúng chỗ thay vì đẩy hết tờ 297mm. Thêm `page.autoHeightPadding` (mặc định `2mm`) nếu máy in cần chừa thêm chân giấy.
+Set `page.height = "auto"` together with `page.width` for roll paper: the agent measures the content height and cuts there instead of feeding a whole 297mm sheet. Add `page.autoHeightPadding` (default `2mm`) when the printer needs extra paper at the bottom.
 
-## Máy in nhiệt / ESC/POS
+## Thermal printers / ESC/POS
 
-- Cách 1 (khuyến nghị): template `html` với `page.width = 80mm`, in như PDF bình thường.
-- Cách 2: template `text` + `options.raw = true`, agent gửi byte thô kèm lệnh ESC/POS. Tuỳ chọn `escpos`: `init`, `cut`, `feed`, `codepage`, `encoding`, `openDrawer`.
-- Trên Windows, in raw cần chia sẻ máy in và đặt `printing.rawShareName` (ví dụ `\\localhost\POS58`).
+- Option 1 (recommended): an `html` template with `page.width = 80mm`, printed like any PDF.
+- Option 2: a `text` template with `options.raw = true`; the agent sends raw bytes with ESC/POS commands. The `escpos` options are `init`, `cut`, `feed`, `codepage`, `encoding`, `openDrawer`.
+- On Windows, raw printing needs the printer shared and `printing.rawShareName` set (for example `\\localhost\POS58`).
 
-## Tunnel công khai
+## Public tunnel
 
-Bật trong tab Tunnel của web UI hoặc gọi API.
+Turn it on in the Tunnel tab of the web UI, or through the API.
 
-- **Cloudflare quick tunnel**: cần `cloudflared`, để trống token. Agent chạy `cloudflared tunnel --url http://127.0.0.1:7788` và lấy URL `*.trycloudflare.com` (đổi mỗi lần chạy).
-- **Cloudflare named tunnel**: tạo tunnel trên Cloudflare Zero Trust rồi điền token + hostname. Agent chạy `cloudflared tunnel --url http://127.0.0.1:7788 run --token <token>`, nhưng tunnel tạo từ dashboard luôn lấy ingress từ xa, nên **bắt buộc** vào Zero Trust > Networks > Tunnels > tunnel đang dùng > Public Hostname và trỏ hostname về `http://127.0.0.1:7788` (hoặc `http://localhost:7788`). Thiếu bước này thì hostname trả 502/1033 dù connector vẫn báo kết nối thành công.
-- **ngrok**: cần `ngrok` và authtoken. Có thể gắn domain cố định.
+- **Cloudflare quick tunnel**: needs `cloudflared` and an empty token. The agent runs `cloudflared tunnel --url http://127.0.0.1:7788` and picks up the `*.trycloudflare.com` URL (it changes on every run).
+- **Cloudflare named tunnel**: create the tunnel in Cloudflare Zero Trust, then fill in the token and hostname. The agent runs `cloudflared tunnel --url http://127.0.0.1:7788 run --token <token>`, but a tunnel created from the dashboard always takes its ingress from there, so you **must** open Zero Trust > Networks > Tunnels > your tunnel > Public Hostname and point the hostname at `http://127.0.0.1:7788` (or `http://localhost:7788`). Without that step the hostname answers 502/1033 even though the connector reports a successful connection.
+- **ngrok**: needs `ngrok` and an authtoken. A fixed domain can be attached.
 
-Bật `tunnel.autoStart` để agent tự mở tunnel mỗi lần khởi động.
+Turn on `tunnel.autoStart` to have the agent open the tunnel on every start.
 
-Sau khi tunnel chạy, agent tự gọi `https://<hostname>/api/health` kèm một header ngẫu nhiên rồi đối chiếu phản hồi để biết địa chỉ công khai có thực sự về đúng agent này không. Không khớp thì trường `warning` trong `GET /api/tunnel` (và tab Tunnel) nói rõ nguyên nhân. Agent cũng cảnh báo khi phát hiện một tiến trình `cloudflared` khác trên máy đang chạy cùng tunnel, vì hai connector cùng tunnel làm Cloudflare chia request cho cả hai.
+Once the tunnel is up, the agent calls `https://<hostname>/api/health` with a random header and checks the response, so it knows whether the public address really reaches this agent. When it does not, the `warning` field of `GET /api/tunnel` (and the Tunnel tab) says why. The agent also warns when another `cloudflared` process on the machine runs the same tunnel, because two connectors on one tunnel make Cloudflare split requests between them.
 
-Khi mở ra Internet, luôn giữ `auth.enabled = true` và chỉ chia sẻ API key cho hệ thống cần dùng.
+When exposing the agent to the Internet, always keep `auth.enabled = true` and share API keys only with systems that need them.
 
-## Giao diện web
+## Web interface
 
-Giao diện dựng bằng React + TypeScript + Vite + Tailwind v4 + shadcn/ui, mã nguồn trong `ui/`, bản build nằm ở `web/` và được agent phục vụ tại `http://<host>:7788`.
+The interface is built with React + TypeScript + Vite + Tailwind v4 + shadcn/ui; the source is in `ui/`, the build output in `web/`, served by the agent at `http://<host>:7788`.
 
 ```bash
-yarn build          # build UI ra thư mục web/
-yarn ui:dev         # chạy Vite dev server (proxy /api và /ws sang cổng 7788)
+yarn build          # build the UI into web/
+yarn ui:dev         # run the Vite dev server (proxies /api and /ws to port 7788)
 ```
 
-Khi truy cập qua tunnel, giao diện sẽ hỏi API key và lưu vào localStorage của trình duyệt. Các thao tác nhạy cảm (xem/tạo/xoá API key, sửa cấu hình chỉ dành cho máy local) chỉ thực hiện được khi mở trực tiếp trên máy chạy agent.
+When reached through a tunnel, the interface asks for an API key and stores it in the browser's localStorage. Sensitive actions (viewing/creating/deleting API keys, editing local-only settings) only work when the interface is opened on the agent machine.
 
-## Cấu trúc dữ liệu
+## Data layout
 
 ```
 ~/.printagent/
-├── config.json          # toàn bộ cấu hình
+├── config.json          # the whole configuration
 ├── templates/<id>/      # template.hbs|template.txt + meta.json
-├── files/               # file PDF/raw của các job (tự dọn theo queue.keepFilesHours)
-├── printagent.db        # lịch sử job (SQLite, kèm file -wal/-shm)
-└── logs/                # log theo ngày
+├── files/               # PDF/raw files of the jobs (cleaned up per queue.keepFilesHours)
+├── printagent.db        # job history (SQLite, plus -wal/-shm files)
+└── logs/                # daily logs
 ```
 
-## Chạy nền
+## Running in the background
 
-Một lệnh cho cả ba hệ điều hành, không cần quyền quản trị và không cần NSSM:
+One command for all three operating systems, with no administrator rights and no NSSM:
 
 ```bash
-printagent service install     # đăng ký khởi động cùng máy
-printagent service status      # xem trạng thái
-printagent service uninstall   # gỡ
+printagent service install     # start together with the machine
+printagent service status      # check the status
+printagent service uninstall   # remove
 ```
 
-Cũng bật/tắt được trong tab Cài đặt của web UI. Bên dưới nó dùng:
+It can also be toggled in the Settings tab of the web UI. Underneath it uses:
 
-| Hệ điều hành | Cơ chế | File/tác vụ tạo ra |
+| Operating system | Mechanism | File/task created |
 | --- | --- | --- |
-| macOS | launchd (LaunchAgent của user) | `~/Library/LaunchAgents/com.printagent.agent.plist` |
+| macOS | launchd (per-user LaunchAgent) | `~/Library/LaunchAgents/com.printagent.agent.plist` |
 | Linux | systemd user unit + `loginctl enable-linger` | `~/.config/systemd/user/printagent.service` |
-| Windows | Task Scheduler, trigger ONLOGON | tác vụ `PrintAgent` |
+| Windows | Task Scheduler, ONLOGON trigger | the `PrintAgent` task |
 
-Trên macOS log chạy nền ghi vào `~/.printagent/logs/service.log`. Trên Linux, `enable-linger` giúp agent chạy cả khi chưa đăng nhập phiên đồ hoạ. Trên Windows tác vụ đăng ký bằng file XML và chạy qua `wscript` nên không bật cửa sổ console mỗi lần đăng nhập; file shim nằm ở `~/.printagent/printagent-service.vbs`.
+On macOS the background logs go to `~/.printagent/logs/service.log`. On Linux, `enable-linger` lets the agent run even before a graphical session is opened. On Windows the task is registered from an XML file and runs through `wscript`, so no console window pops up at every logon; the shim file is at `~/.printagent/printagent-service.vbs`.
 
-## Lưu ý riêng cho Windows
+## Windows specifics
 
-- Bước cài gói dùng `winget` (có sẵn từ Windows 10 21H2). Máy chỉ có `choco` thì phải chạy PowerShell bằng quyền admin, nếu không lệnh cài sẽ bị từ chối và bước đó chỉ còn cảnh báo.
-- Lần đầu agent lắng nghe trên `0.0.0.0`, Windows Firewall sẽ hỏi cấp quyền. Bấm Cancel vẫn dùng được qua `127.0.0.1`, chỉ mất truy cập từ máy khác trong LAN.
-- Máy mới thường đã có sẵn "Microsoft Print to PDF" nên bước máy in không chặn. Máy in mạng phải thêm bằng Settings > Printers & scanners; agent không tự dò mDNS trên Windows.
-- In PDF ưu tiên SumatraPDF (wizard tự cài). Không có thì tự chuyển sang PowerShell `PrintTo`, chậm hơn và bỏ qua phần lớn tuỳ chọn in.
-- In raw (ESC/POS) cần chia sẻ máy in rồi đặt `printing.rawShareName`, ví dụ `\\localhost\POS58`.
-
+- Package installation uses `winget` (available since Windows 10 21H2). On a machine that only has `choco`, PowerShell must run as administrator, otherwise the install command is refused and that step only warns.
+- The first time the agent listens on `0.0.0.0`, Windows Firewall asks for permission. Pressing Cancel still works over `127.0.0.1`; only access from other machines on the LAN is lost.
+- New machines usually ship with "Microsoft Print to PDF", so the printer step does not block. Network printers must be added through Settings > Printers & scanners; the agent does not scan mDNS on Windows.
+- PDF printing prefers SumatraPDF (the wizard installs it). Without it the agent falls back to PowerShell `PrintTo`, which is slower and ignores most print options.
+- Raw printing (ESC/POS) needs the printer shared and `printing.rawShareName` set, for example `\\localhost\POS58`.

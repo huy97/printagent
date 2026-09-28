@@ -62,6 +62,28 @@ export const en = {
   'error.job_interrupted': 'The agent restarted while this job was still running',
   'error.prepare_failed': 'Preparing the document failed: {message}',
 
+  'error.internal': 'Internal error: {message}',
+  'error.request_failed': 'Request failed: {message}',
+  'error.invalid_json_body': 'The request body is not valid JSON',
+  'error.payload_too_large': 'The request body is too large',
+  'error.upload_too_large': 'The uploaded file exceeds the size limit',
+  'error.upload_too_many_files': 'Too many files were uploaded',
+  'error.upload_unexpected_field': 'Unexpected upload field "{field}"',
+  'error.apikey_local_only': 'API keys can only be managed from the machine running the agent',
+  'error.mcp_post_only': 'The MCP endpoint only accepts POST (streamable HTTP, stateless mode)',
+  'error.raw_share_missing':
+    'Raw printing on Windows needs a shared printer and printing.rawShareName (for example: \\\\localhost\\POS58)',
+  'error.port_in_use':
+    'Port {port} is already in use. The agent may already be running in the background (printagent service status), or pick another port: printagent start --port 7799',
+  'error.print_failed': 'Printing failed: {message}',
+  'ws.unsupported_command': 'Unsupported command: {type}',
+
+  'test_page.heading': 'PrintAgent - Test page',
+  'test_page.printer': 'Printer',
+  'test_page.time': 'Time',
+  'test_page.platform': 'Platform',
+  'test_page.footer': 'If you can read this page, printing is configured correctly.',
+
   'setup.step.node': 'Node.js version',
   'setup.step.node.ok': 'Node {version} on {platform}/{arch}',
   'setup.step.node.too_old': 'Node {version} is too old, needs >= {min}',

@@ -10,6 +10,8 @@ import {
 } from '../render/templates.js';
 import { getConfig } from '../core/config.js';
 import { getTunnelStatus } from '../core/tunnel.js';
+import { AppError, badRequest } from '../util/errors.js';
+import { t } from '../i18n/index.js';
 
 export function createLocalApi() {
   return {
@@ -69,9 +71,14 @@ export function createRemoteApi({ baseUrl, apiKey }) {
       parsed = { raw: text };
     }
     if (!response.ok) {
-      const error = new Error(parsed?.error?.message ?? `HTTP ${response.status}`);
-      error.details = parsed;
-      throw error;
+      const remote = parsed?.error ?? {};
+      const known = remote.key && t(remote.key) !== remote.key;
+      throw new AppError(known ? remote.key : 'error.request_failed', {
+        status: response.status,
+        code: remote.code ?? 'remote_error',
+        params: known ? remote.params : { message: remote.message ?? `HTTP ${response.status}` },
+        details: parsed,
+      });
     }
     return parsed;
   }
@@ -88,7 +95,7 @@ export function createRemoteApi({ baseUrl, apiKey }) {
           result.defaultPrinter ??
           result.printers?.find((item) => item.isSystemDefault)?.name ??
           result.printers?.[0]?.name;
-        if (!printer) throw new Error('Agent chưa có máy in nào để in thử');
+        if (!printer) throw badRequest('error.printer_none_installed');
       }
       return call('POST', `/api/printers/${encodeURIComponent(printer)}/test`);
     },

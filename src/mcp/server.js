@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { t } from '../i18n/index.js';
+import { serializeError } from '../util/errors.js';
 
 const printOptionsSchema = z
   .object({
@@ -37,9 +38,13 @@ function wrap(handler) {
     try {
       return text(await handler(args ?? {}));
     } catch (error) {
+      const payload = serializeError(error);
       return {
         isError: true,
-        content: [{ type: 'text', text: t('mcp.error', { message: error.message }) }],
+        content: [
+          { type: 'text', text: t('mcp.error', { message: payload.message }) },
+          { type: 'text', text: JSON.stringify({ error: payload }) },
+        ],
       };
     }
   };

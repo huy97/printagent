@@ -64,8 +64,8 @@ function nodeMajorOf(binary) {
 }
 
 /**
- * Trên Windows không có nvm nên phải dò các vị trí cài đặt chuẩn: bản vừa cài
- * chưa nằm trong PATH của tiến trình đang chạy.
+ * Windows has no nvm, so probe the standard install locations: a fresh install is
+ * not yet on the running process's PATH.
  */
 function findWindowsNode(major = MIN_NODE_MAJOR) {
   const nvmHome = process.env.NVM_HOME || path.join(process.env.APPDATA ?? '', 'nvm');
@@ -98,7 +98,7 @@ function findNewerNode(major = MIN_NODE_MAJOR) {
 }
 
 /**
- * Chạy lại chính wizard bằng Node mới vừa cài rồi thoát tiến trình cũ.
+ * Re-runs the wizard with the freshly installed Node, then exits the old process.
  */
 function restartWith(nodeBinary) {
   const args = process.argv.slice(2);
@@ -107,8 +107,8 @@ function restartWith(nodeBinary) {
 }
 
 /**
- * Chỉ tự khởi động lại khi wizard chạy trong terminal. Gọi từ web UI mà thoát
- * tiến trình thì giết luôn server đang phục vụ giao diện đó.
+ * Only restart automatically when the wizard runs in a terminal. Exiting from a web UI
+ * call would kill the very server serving that UI.
  */
 function useNode(binary, context) {
   if (!context.allowRestart) {
@@ -254,7 +254,7 @@ const STEP_LIST = [
           ? ok('setup.step.pdf_engine.ok_path', { version: health.version, path: health.executablePath })
           : ok('setup.step.pdf_engine.ok', { version: health.version });
       }
-      // Puppeteer chưa có Chromium: dò trình duyệt sẵn có rồi ghi vào cấu hình.
+      // Puppeteer has no Chromium yet: look for an installed browser and save it to the config.
       const found = findSystemChrome();
       if (found) {
         updateConfig({ render: { chromePath: found } });
@@ -308,7 +308,7 @@ const STEP_LIST = [
     async fix({ log }) {
       if (process.platform !== 'win32') return false;
       log?.(t('setup.step.print_tool.installing'));
-      // Bản portable không cần quyền admin nên chạy được cả trên máy chưa có winget.
+      // The portable build needs no admin rights, so it works even without winget.
       const portable = await installSumatraPortable({ log });
       if (portable) {
         updateConfig({ printing: { sumatraPath: portable } });
@@ -409,7 +409,7 @@ const STEP_LIST = [
 ];
 
 /**
- * Dò máy in IPP quảng bá qua mDNS để tự thêm vào CUPS.
+ * Discovers IPP printers advertised over mDNS and adds them to CUPS.
  */
 async function discoverNetworkPrinters() {
   if (process.platform === 'darwin') {

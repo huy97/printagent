@@ -2,22 +2,22 @@ import { en } from './en'
 import { vi } from './vi'
 
 export type Locale = 'vi' | 'en'
-export type MessageKey = keyof typeof vi
+export type MessageKey = keyof typeof en
 
-export const LOCALES: Locale[] = ['vi', 'en']
+export const LOCALES: Locale[] = ['en', 'vi']
 export const LOCALE_LABELS: Record<Locale, string> = { vi: 'Tiếng Việt', en: 'English' }
 export const LOCALE_SHORT: Record<Locale, string> = { vi: 'VI', en: 'EN' }
 
-const CATALOGS: Record<Locale, Record<string, string>> = { vi, en }
+const CATALOGS: Record<Locale, Record<string, string>> = { en, vi }
 const STORAGE_KEY = 'printagent.locale'
-const DEFAULT_LOCALE: Locale = 'vi'
+const DEFAULT_LOCALE: Locale = 'en'
 
 function readStored(): Locale {
   try {
     const value = localStorage.getItem(STORAGE_KEY)
-    if (value === 'vi' || value === 'en') return value
+    if (value === 'en' || value === 'vi') return value
   } catch {
-    // localStorage bị chặn khi trình duyệt cấm cookie của bên thứ ba
+    // localStorage throws when the browser blocks third-party storage
   }
   return DEFAULT_LOCALE
 }
@@ -33,7 +33,7 @@ export function storeLocale(locale: Locale) {
   try {
     localStorage.setItem(STORAGE_KEY, locale)
   } catch {
-    // Không lưu được thì vẫn dùng cho phiên hiện tại
+    // Still applies to the current session when it cannot be persisted
   }
 }
 

@@ -7,7 +7,7 @@ import { getConfig } from './config.js';
 import { shortId } from '../util/id.js';
 import { createLogger } from '../util/logger.js';
 import * as printers from '../printers/index.js';
-import { notFound } from '../util/errors.js';
+import { AppError, notFound } from '../util/errors.js';
 import { t } from '../i18n/index.js';
 
 const log = createLogger('queue');
@@ -17,8 +17,8 @@ jobEvents.setMaxListeners(0);
 const pending = [];
 let running = 0;
 
-// Job đang chạy được giữ nguyên tham chiếu trong `live` để runner, cancelJob và
-// prepare() cùng thao tác trên một object; DB vẫn là nơi lưu trữ chính thức.
+// Running jobs keep a shared reference in `live` so the runner, cancelJob and
+// prepare() mutate the same object; the DB remains the source of truth.
 const live = new Map();
 
 const ACTIVE_STATUSES = new Set(['queued', 'rendering', 'printing']);
@@ -28,9 +28,9 @@ const FINAL_STATUSES = new Set(['completed', 'failed', 'canceled']);
 const COLUMNS = [
   'id', 'type', 'status', 'printer', 'copies', 'title', 'templateId', 'data', 'templateSource',
   'engine', 'page', 'fileName', 'filePath', 'bytes', 'options', 'source', 'origin', 'clientId',
-  'attempts', 'nativeJobId', 'output', 'error', 'createdAt', 'startedAt', 'finishedAt',
+  'attempts', 'nativeJobId', 'output', 'error', 'errorKey', 'errorParams', 'createdAt', 'startedAt', 'finishedAt',
 ];
-const JSON_COLUMNS = new Set(['data', 'page', 'options', 'source']);
+const JSON_COLUMNS = new Set(['data', 'page', 'options', 'source', 'errorParams']);
 
 function toRow(job) {
   const row = {};
@@ -44,7 +44,7 @@ function toRow(job) {
       row[column] = value;
     }
   }
-  // Các cột NOT NULL: job từ index.json bản cũ có thể thiếu hẳn những field này.
+  // NOT NULL columns: jobs imported from the legacy index.json may lack these fields.
   row.copies = Number(row.copies) || 1;
   row.attempts = Number(row.attempts) || 0;
   row.createdAt = row.createdAt ?? new Date().toISOString();
@@ -85,6 +85,8 @@ function rowToJob(row) {
     nativeJobId: row.nativeJobId,
     output: row.output,
     error: row.error,
+    errorKey: row.errorKey,
+    errorParams: parseJson(row.errorParams),
     createdAt: row.createdAt,
     startedAt: row.startedAt,
     finishedAt: row.finishedAt,
@@ -94,8 +96,8 @@ function rowToJob(row) {
 const INSERT_SQL = `INSERT INTO jobs (${COLUMNS.join(', ')})
   VALUES (${COLUMNS.map((column) => `:${column}`).join(', ')})`;
 
-// Ghi lại toàn bộ cột thay vì chỉ phần patch: một số chỗ (ví dụ prepare() bật
-// options.raw) sửa job tại chỗ rồi mới gọi updateJob với patch khác.
+// Write every column rather than just the patch: some callers (e.g. prepare() setting
+// options.raw) mutate the job in place before calling updateJob with another patch.
 const UPDATE_SQL = `UPDATE jobs SET ${COLUMNS.filter((column) => column !== 'id')
   .map((column) => `${column} = :${column}`)
   .join(', ')} WHERE id = :id`;
@@ -104,16 +106,16 @@ function insert(job) {
   stmt(INSERT_SQL).run(toRow(job));
 }
 
-// UPDATE thuần, không upsert: job đã bị trimJobs xoá thì không được sống lại khi
-// runner còn giữ tham chiếu và gọi updateJob muộn.
+// Plain UPDATE, no upsert: a job removed by trimJobs must not come back when the
+// runner still holds a reference and calls updateJob late.
 function save(job) {
   stmt(UPDATE_SQL).run(toRow(job));
 }
 
 /**
- * DB dùng chung cho mọi process, nên chỉ tiến trình sở hữu queue (lệnh `start`)
- * được đánh dấu job dở dang là thất bại. CLI hay MCP stdio chạy song song thì
- * không được phép kết luận job của server là đã chết.
+ * The DB is shared by every process, so only the queue owner (the `start` command)
+ * may mark unfinished jobs as failed. A CLI or MCP stdio process running alongside
+ * must not conclude that the server's jobs are dead.
  */
 export function loadJobs({ recoverInterrupted = false } = {}) {
   ensureDataDirs();
@@ -121,33 +123,34 @@ export function loadJobs({ recoverInterrupted = false } = {}) {
   live.clear();
   if (!recoverInterrupted) return;
   const info = stmt(
-    `UPDATE jobs SET status = 'failed', error = ?, finishedAt = COALESCE(finishedAt, ?)
+    `UPDATE jobs SET status = 'failed', error = ?, errorKey = ?, errorParams = NULL,
+       finishedAt = COALESCE(finishedAt, ?)
      WHERE status IN (${ACTIVE_LIST.map(() => '?').join(', ')})`,
-  ).run(t('error.job_interrupted'), new Date().toISOString(), ...ACTIVE_LIST);
+  ).run(t('error.job_interrupted'), 'error.job_interrupted', new Date().toISOString(), ...ACTIVE_LIST);
   if (info.changes > 0) {
-    log.warn(`Đã đánh dấu ${info.changes} job bị ngắt giữa chừng là thất bại`);
+    log.warn(`Marked ${info.changes} interrupted job(s) as failed`);
   }
 }
 
-// Người dùng bản cũ có lịch sử job trong jobs/index.json; nạp một lần rồi đổi tên file.
+// Older versions kept job history in jobs/index.json; import it once, then rename the file.
 function importLegacyIndex(db) {
   if (!existsSync(PATHS.jobsIndex)) return;
   const backup = `${PATHS.jobsIndex}.migrated`;
   try {
     if (stmt('SELECT COUNT(*) AS total FROM jobs').get().total === 0) {
       const parsed = JSON.parse(readFileSync(PATHS.jobsIndex, 'utf8'));
-      // index.json xếp job mới nhất trước; chèn ngược lại để seq tăng theo thời gian.
+      // index.json lists the newest job first; insert in reverse so seq grows over time.
       const legacy = Array.isArray(parsed) ? parsed.slice().reverse() : [];
       db.transaction(() => {
         for (const job of legacy) {
           if (job?.id && job.type && job.status) insert(job);
         }
       })();
-      if (legacy.length > 0) log.info(`Đã chuyển ${legacy.length} job từ index.json sang SQLite`);
+      if (legacy.length > 0) log.info(`Migrated ${legacy.length} job(s) from index.json to SQLite`);
     }
     renameSync(PATHS.jobsIndex, backup);
   } catch (error) {
-    log.warn(`Không chuyển được jobs/index.json: ${error.message}`);
+    log.warn(`Could not migrate jobs/index.json: ${error.message}`);
   }
 }
 
@@ -281,10 +284,10 @@ export function cleanupFiles() {
         removed += 1;
       }
     } catch {
-      // bỏ qua file đang bị khoá
+      // skip files that are still locked
     }
   }
-  if (removed > 0) log.info(`Đã dọn ${removed} file tạm`);
+  if (removed > 0) log.info(`Removed ${removed} temporary file(s)`);
   return removed;
 }
 
@@ -308,7 +311,7 @@ function drain() {
     const task = pending.shift();
     running += 1;
     runJob(task)
-      .catch((error) => log.error(`Lỗi xử lý job: ${error.message}`))
+      .catch((error) => log.error(`Job runner error: ${error.message}`))
       .finally(() => {
         running -= 1;
         drain();
@@ -333,7 +336,9 @@ async function runJob({ job, prepare }) {
   } catch (error) {
     updateJob(job, {
       status: 'failed',
-      error: t('error.prepare_failed', { message: error.message }),
+      ...(error instanceof AppError
+        ? failure(error.key, error.params)
+        : failure('error.prepare_failed', { message: error.message })),
       finishedAt: new Date().toISOString(),
     });
     return;
@@ -362,18 +367,18 @@ async function runJob({ job, prepare }) {
         status: 'completed',
         nativeJobId: result.nativeJobId,
         output: result.output,
-        error: null,
+        ...failure(null),
         finishedAt: new Date().toISOString(),
       });
-      log.info(`Job ${job.id} đã gửi tới máy in ${job.printer}`, { nativeJobId: result.nativeJobId });
+      log.info(`Job ${job.id} sent to printer ${job.printer}`, { nativeJobId: result.nativeJobId });
       return;
     } catch (error) {
       const message = error.stderr?.trim() || error.message;
-      log.warn(`Job ${job.id} in lỗi (lần ${attempt}): ${message}`);
+      log.warn(`Job ${job.id} failed to print (attempt ${attempt}): ${message}`);
       if (attempt > (config.maxRetries || 0)) {
         updateJob(job, {
           status: 'failed',
-          error: message,
+          ...failure('error.print_failed', { message }),
           finishedAt: new Date().toISOString(),
         });
         return;
@@ -381,6 +386,17 @@ async function runJob({ job, prepare }) {
       await delay(config.retryDelayMs || 3000);
     }
   }
+}
+
+function failure(key, params) {
+  if (!key) return { error: null, errorKey: null, errorParams: null };
+  return { error: t(key, params), errorKey: key, errorParams: params ?? null };
+}
+
+/** Renders the stored error in the caller's locale; the raw key and params stay on the job. */
+export function localizeJob(job, locale) {
+  if (!job?.errorKey) return job;
+  return { ...job, error: t(job.errorKey, job.errorParams ?? undefined, locale) };
 }
 
 function delay(ms) {

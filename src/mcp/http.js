@@ -1,6 +1,8 @@
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMcpServer } from './server.js';
 import { createLogger } from '../util/logger.js';
+import { serializeError } from '../util/errors.js';
+import { t, localeFromRequest } from '../i18n/index.js';
 
 const log = createLogger('mcp');
 
@@ -9,7 +11,11 @@ export function createMcpHttpHandler(api) {
     if (req.method !== 'POST') {
       res.status(405).json({
         jsonrpc: '2.0',
-        error: { code: -32000, message: 'Endpoint MCP chỉ hỗ trợ POST (streamable HTTP, chế độ stateless)' },
+        error: {
+          code: -32000,
+          message: t('error.mcp_post_only', null, localeFromRequest(req)),
+          data: { key: 'error.mcp_post_only' },
+        },
         id: null,
       });
       return;
@@ -27,13 +33,10 @@ export function createMcpHttpHandler(api) {
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      log.error(`Lỗi xử lý MCP request: ${error.message}`);
+      log.error(`MCP request failed: ${error.message}`);
       if (!res.headersSent) {
-        res.status(500).json({
-          jsonrpc: '2.0',
-          error: { code: -32603, message: error.message },
-          id: null,
-        });
+        const { message, ...data } = serializeError(error, localeFromRequest(req));
+        res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message, data }, id: null });
       }
     }
   };

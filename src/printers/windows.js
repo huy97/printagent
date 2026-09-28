@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { run, tryRun, powershell } from '../util/exec.js';
 import { getConfig } from '../core/config.js';
 import { PATHS } from '../core/paths.js';
+import { badRequest } from '../util/errors.js';
 
 const STATUS_MAP = {
   0: 'unknown',
@@ -82,7 +83,7 @@ function buildSumatraSettings({ copies, duplex, paperSize, orientation, fitToPag
   if (paperSize) settings.push(`paper=${paperSize}`);
   if (orientation === 'landscape') settings.push('landscape');
   else if (orientation === 'portrait') settings.push('portrait');
-  // Không có khổ giấy nghĩa là PDF khổ riêng (bill, tem): chỉ thu nhỏ khi tràn, không phóng to.
+  // No paper size means a custom-size PDF (receipt, label): only shrink on overflow, never enlarge.
   settings.push(fitToPage === false ? 'noscale' : paperSize ? 'fit' : 'shrink');
   return settings.join(',');
 }
@@ -110,16 +111,14 @@ export async function printFile(filePath, options = {}) {
   await powershell(script, { timeout: options.timeout ?? 120000 });
   return {
     nativeJobId: null,
-    output: 'powershell:PrintTo (khuyến nghị cài SumatraPDF để in ổn định hơn)',
+    output: 'powershell:PrintTo (install SumatraPDF for more reliable printing)',
   };
 }
 
 export async function printRaw(filePath, options = {}) {
   const share = options.rawShareName || getConfig().printing.rawShareName;
   if (!share) {
-    throw new Error(
-      'In raw trên Windows cần chia sẻ máy in và cấu hình printing.rawShareName (ví dụ: \\\\localhost\\POS58)',
-    );
+    throw badRequest('error.raw_share_missing');
   }
   const target = share.startsWith('\\\\') ? share : `\\\\localhost\\${share}`;
   await run('cmd.exe', ['/c', 'copy', '/b', filePath, target], { timeout: options.timeout ?? 60000 });

@@ -21,7 +21,7 @@ import {
 
 const [, , command = 'start', ...rest] = process.argv;
 
-// PRINTAGENT_LANG (nếu có) đã được i18n đọc sẵn, ở đây chỉ lấy tiếp lựa chọn trong cấu hình.
+// i18n already honours PRINTAGENT_LANG; otherwise fall back to the configured locale.
 if (!process.env.PRINTAGENT_LANG) setLocale(getConfig().agent.locale);
 
 function flag(name) {
@@ -34,7 +34,7 @@ function flag(name) {
 async function main() {
   switch (command) {
     case 'start': {
-      // Giao diện web luôn lên trước, phần cài đặt còn thiếu để người dùng bấm ngay trên UI.
+      // The web UI always starts first; any unfinished setup is completed from there.
       const firstRun = !isSetupComplete();
       const { port } = await startServer({
         port: typeof flag('port') === 'string' ? Number(flag('port')) : undefined,

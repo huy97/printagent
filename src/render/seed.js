@@ -32,7 +32,7 @@ const INVOICE_A4 = `<!doctype html>
     </div>
     <div style="text-align:right">
       <div><strong>HOÁ ĐƠN {{code}}</strong></div>
-      <div class="muted">{{formatDate date dateStyle="short" timeStyle="short"}}</div>
+      <div class="muted">{{formatDate date dateStyle="short" timeStyle="short" locale="vi-VN"}}</div>
       <div class="muted">Khách: {{customer.name}}</div>
       {{#if customer.phone}}<div class="muted">{{customer.phone}}</div>{{/if}}
     </div>
@@ -49,15 +49,15 @@ const INVOICE_A4 = `<!doctype html>
         <td>{{inc @index}}</td>
         <td>{{name}}{{#if note}}<div class="muted">{{note}}</div>{{/if}}</td>
         <td class="num">{{qty}}</td>
-        <td class="num">{{currency price}}</td>
-        <td class="num">{{currency (mul qty price)}}</td>
+        <td class="num">{{currency price locale="vi-VN" currency="VND"}}</td>
+        <td class="num">{{currency (mul qty price) locale="vi-VN" currency="VND"}}</td>
       </tr>
       {{/each}}
     </tbody>
     <tfoot>
-      {{#if discount}}<tr><td colspan="4" class="num">Giảm giá</td><td class="num">-{{currency discount}}</td></tr>{{/if}}
-      {{#if vat}}<tr><td colspan="4" class="num">VAT</td><td class="num">{{currency vat}}</td></tr>{{/if}}
-      <tr class="total"><td colspan="4" class="num">Tổng cộng</td><td class="num">{{currency total}}</td></tr>
+      {{#if discount}}<tr><td colspan="4" class="num">Giảm giá</td><td class="num">-{{currency discount locale="vi-VN" currency="VND"}}</td></tr>{{/if}}
+      {{#if vat}}<tr><td colspan="4" class="num">VAT</td><td class="num">{{currency vat locale="vi-VN" currency="VND"}}</td></tr>{{/if}}
+      <tr class="total"><td colspan="4" class="num">Tổng cộng</td><td class="num">{{currency total locale="vi-VN" currency="VND"}}</td></tr>
     </tfoot>
   </table>
 
@@ -88,19 +88,19 @@ const BILL_80MM = `<!doctype html>
   </div>
   <hr>
   <div>Hoá đơn: <strong>{{code}}</strong></div>
-  <div>{{formatDate date dateStyle="short" timeStyle="short"}}</div>
+  <div>{{formatDate date dateStyle="short" timeStyle="short" locale="vi-VN"}}</div>
   {{#if customer.name}}<div>Khách: {{customer.name}}</div>{{/if}}
   <hr>
   <table>
     {{#each items}}
     <tr><td colspan="2">{{name}}</td></tr>
-    <tr><td>{{qty}} x {{formatNumber price}}</td><td class="num">{{formatNumber (mul qty price)}}</td></tr>
+    <tr><td>{{qty}} x {{formatNumber price locale="vi-VN"}}</td><td class="num">{{formatNumber (mul qty price) locale="vi-VN"}}</td></tr>
     {{/each}}
   </table>
   <hr>
   <table>
-    {{#if discount}}<tr><td>Giảm giá</td><td class="num">-{{formatNumber discount}}</td></tr>{{/if}}
-    <tr class="total"><td>TỔNG</td><td class="num">{{formatNumber total}}</td></tr>
+    {{#if discount}}<tr><td>Giảm giá</td><td class="num">-{{formatNumber discount locale="vi-VN"}}</td></tr>{{/if}}
+    <tr class="total"><td>TỔNG</td><td class="num">{{formatNumber total locale="vi-VN"}}</td></tr>
   </table>
   <hr>
   <div class="center">{{qr code size=80}}</div>
@@ -114,16 +114,16 @@ MST: {{shop.taxCode}}{{/if}}
 {{repeat "=" 32}}
 HOA DON BAN HANG
 So: {{code}}
-Ngay: {{formatDate date day="2-digit" month="2-digit" year="numeric"}} {{formatDate date hour="2-digit" minute="2-digit"}}{{#if customer.name}}
+Ngay: {{formatDate date day="2-digit" month="2-digit" year="numeric" locale="vi-VN"}} {{formatDate date hour="2-digit" minute="2-digit" locale="vi-VN"}}{{#if customer.name}}
 Khach: {{ascii customer.name}}{{/if}}
 {{repeat "-" 32}}
 {{#each items}}{{ascii name}}
-{{cols (concat "  " qty " x " (formatNumber price)) (formatNumber (mul qty price)) 32}}
+{{cols (concat "  " qty " x " (formatNumber price locale="vi-VN")) (formatNumber (mul qty price) locale="vi-VN") 32}}
 {{/each}}{{repeat "-" 32}}
-{{#if subtotal}}{{cols "Cong tien hang" (formatNumber subtotal) 32}}
-{{/if}}{{#if discount}}{{cols "Giam gia" (concat "-" (formatNumber discount)) 32}}
-{{/if}}{{#if vat}}{{cols "Thue GTGT" (formatNumber vat) 32}}
-{{/if}}{{cols "TONG CONG" (formatNumber total) 32}}
+{{#if subtotal}}{{cols "Cong tien hang" (formatNumber subtotal locale="vi-VN") 32}}
+{{/if}}{{#if discount}}{{cols "Giam gia" (concat "-" (formatNumber discount locale="vi-VN")) 32}}
+{{/if}}{{#if vat}}{{cols "Thue GTGT" (formatNumber vat locale="vi-VN") 32}}
+{{/if}}{{cols "TONG CONG" (formatNumber total locale="vi-VN") 32}}
 {{repeat "=" 32}}
 Cam on quy khach!`;
 
@@ -193,7 +193,7 @@ const VAT_INVOICE_A4 = `<!doctype html>
   <div class="top">
     <div class="title">
       <h1>Hoá đơn giá trị gia tăng</h1>
-      <div class="date">Ngày {{formatDate invoice.date day="2-digit"}} tháng {{formatDate invoice.date month="2-digit"}} năm {{formatDate invoice.date year="numeric"}}</div>
+      <div class="date">Ngày {{formatDate invoice.date day="2-digit" locale="vi-VN"}} tháng {{formatDate invoice.date month="2-digit" locale="vi-VN"}} năm {{formatDate invoice.date year="numeric" locale="vi-VN"}}</div>
       {{#if invoice.taxAuthorityCode}}
       <div style="margin-top:4px">Mã của cơ quan thuế: <strong>{{invoice.taxAuthorityCode}}</strong></div>
       {{/if}}
@@ -246,9 +246,9 @@ const VAT_INVOICE_A4 = `<!doctype html>
         <td class="center">{{inc @index}}</td>
         <td>{{name}}{{#if note}}<div style="font-style:italic;color:#555">{{note}}</div>{{/if}}</td>
         <td class="center">{{unit}}</td>
-        <td class="num">{{formatNumber qty digits=0}}</td>
-        <td class="num">{{formatNumber price}}</td>
-        <td class="num">{{formatNumber (mul qty price)}}</td>
+        <td class="num">{{formatNumber qty digits=0 locale="vi-VN"}}</td>
+        <td class="num">{{formatNumber price locale="vi-VN"}}</td>
+        <td class="num">{{formatNumber (mul qty price) locale="vi-VN"}}</td>
       </tr>
       {{/each}}
     </tbody>
@@ -256,11 +256,11 @@ const VAT_INVOICE_A4 = `<!doctype html>
 
   <table class="sums" style="margin-top:8px">
     {{#if discount}}
-    <tr><td class="label">Chiết khấu thương mại:</td><td class="num">-{{formatNumber discount}}</td></tr>
+    <tr><td class="label">Chiết khấu thương mại:</td><td class="num">-{{formatNumber discount locale="vi-VN"}}</td></tr>
     {{/if}}
-    <tr><td class="label">Cộng tiền hàng:</td><td class="num">{{formatNumber subtotal}}</td></tr>
-    <tr><td class="label">Thuế suất GTGT: {{vatRate}}% - Tiền thuế GTGT:</td><td class="num">{{formatNumber vatAmount}}</td></tr>
-    <tr><td class="label" style="font-size:14px">Tổng cộng tiền thanh toán:</td><td class="num" style="font-size:14px">{{formatNumber total}}</td></tr>
+    <tr><td class="label">Cộng tiền hàng:</td><td class="num">{{formatNumber subtotal locale="vi-VN"}}</td></tr>
+    <tr><td class="label">Thuế suất GTGT: {{vatRate}}% - Tiền thuế GTGT:</td><td class="num">{{formatNumber vatAmount locale="vi-VN"}}</td></tr>
+    <tr><td class="label" style="font-size:14px">Tổng cộng tiền thanh toán:</td><td class="num" style="font-size:14px">{{formatNumber total locale="vi-VN"}}</td></tr>
   </table>
 
   <div class="words">Số tiền viết bằng chữ: {{vndWords total}} đồng.</div>
@@ -277,7 +277,7 @@ const VAT_INVOICE_A4 = `<!doctype html>
       <div class="digital">
         Signature Valid<br>
         Ký bởi: {{signer}}<br>
-        Ký ngày: {{formatDate signedAt day="2-digit" month="2-digit" year="numeric"}} {{formatDate signedAt hour="2-digit" minute="2-digit"}}
+        Ký ngày: {{formatDate signedAt day="2-digit" month="2-digit" year="numeric" locale="vi-VN"}} {{formatDate signedAt hour="2-digit" minute="2-digit" locale="vi-VN"}}
       </div>
       {{/if}}
     </div>
@@ -324,7 +324,7 @@ const POS_INVOICE_80MM = `<!doctype html>
   <table>
     <tr><td>Ký hiệu</td><td class="num bold">{{invoice.serial}}</td></tr>
     <tr><td>Số hoá đơn</td><td class="num bold">{{invoice.number}}</td></tr>
-    <tr><td>Ngày</td><td class="num">{{formatDate invoice.date day="2-digit" month="2-digit" year="numeric"}} {{formatDate invoice.date hour="2-digit" minute="2-digit"}}</td></tr>
+    <tr><td>Ngày</td><td class="num">{{formatDate invoice.date day="2-digit" month="2-digit" year="numeric" locale="vi-VN"}} {{formatDate invoice.date hour="2-digit" minute="2-digit" locale="vi-VN"}}</td></tr>
     {{#if invoice.cashier}}<tr><td>Thu ngân</td><td class="num">{{invoice.cashier}}</td></tr>{{/if}}
   </table>
   {{#if buyer.name}}
@@ -338,19 +338,19 @@ const POS_INVOICE_80MM = `<!doctype html>
     {{#each items}}
     <tr><td colspan="2" class="bold">{{name}}</td></tr>
     <tr>
-      <td>{{formatNumber qty digits=0}} {{unit}} x {{formatNumber price}}</td>
-      <td class="num">{{formatNumber (mul qty price)}}</td>
+      <td>{{formatNumber qty digits=0 locale="vi-VN"}} {{unit}} x {{formatNumber price locale="vi-VN"}}</td>
+      <td class="num">{{formatNumber (mul qty price) locale="vi-VN"}}</td>
     </tr>
     {{/each}}
   </table>
   <hr>
   <table>
-    {{#if discount}}<tr><td>Chiết khấu</td><td class="num">-{{formatNumber discount}}</td></tr>{{/if}}
-    <tr><td>Cộng tiền hàng</td><td class="num">{{formatNumber subtotal}}</td></tr>
-    <tr><td>Thuế GTGT {{vatRate}}%</td><td class="num">{{formatNumber vatAmount}}</td></tr>
-    <tr class="total"><td>TỔNG THANH TOÁN</td><td class="num">{{formatNumber total}}</td></tr>
-    {{#if payment.cash}}<tr><td>Tiền khách đưa</td><td class="num">{{formatNumber payment.cash}}</td></tr>{{/if}}
-    {{#if payment.change}}<tr><td>Tiền thối lại</td><td class="num">{{formatNumber payment.change}}</td></tr>{{/if}}
+    {{#if discount}}<tr><td>Chiết khấu</td><td class="num">-{{formatNumber discount locale="vi-VN"}}</td></tr>{{/if}}
+    <tr><td>Cộng tiền hàng</td><td class="num">{{formatNumber subtotal locale="vi-VN"}}</td></tr>
+    <tr><td>Thuế GTGT {{vatRate}}%</td><td class="num">{{formatNumber vatAmount locale="vi-VN"}}</td></tr>
+    <tr class="total"><td>TỔNG THANH TOÁN</td><td class="num">{{formatNumber total locale="vi-VN"}}</td></tr>
+    {{#if payment.cash}}<tr><td>Tiền khách đưa</td><td class="num">{{formatNumber payment.cash locale="vi-VN"}}</td></tr>{{/if}}
+    {{#if payment.change}}<tr><td>Tiền thối lại</td><td class="num">{{formatNumber payment.change locale="vi-VN"}}</td></tr>{{/if}}
     {{#if payment.method}}<tr><td>Hình thức</td><td class="num">{{payment.method}}</td></tr>{{/if}}
   </table>
   <div class="words">Bằng chữ: {{vndWords total}} đồng.</div>
@@ -406,7 +406,7 @@ const CASH_RECEIPT_A5 = `<!doctype html>
 
   <div class="title">
     <h1>Phiếu thu</h1>
-    <div class="date">Ngày {{formatDate receipt.date day="2-digit"}} tháng {{formatDate receipt.date month="2-digit"}} năm {{formatDate receipt.date year="numeric"}}</div>
+    <div class="date">Ngày {{formatDate receipt.date day="2-digit" locale="vi-VN"}} tháng {{formatDate receipt.date month="2-digit" locale="vi-VN"}} năm {{formatDate receipt.date year="numeric" locale="vi-VN"}}</div>
   </div>
 
   <div class="meta">
@@ -422,7 +422,7 @@ const CASH_RECEIPT_A5 = `<!doctype html>
     <div class="line">Họ và tên người nộp tiền: <strong>{{payer.name}}</strong></div>
     <div class="line">Địa chỉ: {{payer.address}}</div>
     <div class="line">Lý do nộp: {{reason}}</div>
-    <div class="line">Số tiền: <span class="amount">{{formatNumber amount}}</span> {{#if this.currency}}{{this.currency}}{{else}}VND{{/if}}</div>
+    <div class="line">Số tiền: <span class="amount">{{formatNumber amount locale="vi-VN"}}</span> {{#if this.currency}}{{this.currency}}{{else}}VND{{/if}}</div>
     <div class="line">(Viết bằng chữ): <em>{{vndWords amount}} đồng.</em></div>
     <div class="line">Kèm theo: {{receipt.attachments}} chứng từ gốc.</div>
   </div>
@@ -458,8 +458,8 @@ const CASH_RECEIPT_A5 = `<!doctype html>
   <div class="tail">
     <div>Đã nhận đủ số tiền (viết bằng chữ): {{vndWords amount}} đồng.</div>
     {{#if exchangeRate}}
-    <div>+ Tỷ giá ngoại tệ: {{formatNumber exchangeRate digits=2}}</div>
-    <div>+ Số tiền quy đổi: {{formatNumber convertedAmount}}</div>
+    <div>+ Tỷ giá ngoại tệ: {{formatNumber exchangeRate digits=2 locale="vi-VN"}}</div>
+    <div>+ Số tiền quy đổi: {{formatNumber convertedAmount locale="vi-VN"}}</div>
     {{/if}}
   </div>
 </body></html>`;
@@ -596,7 +596,7 @@ const SHIPPING_LABEL = `<!doctype html>
       </div>
       <div class="pad divider" style="width:30mm">
         <div class="service">{{carrier.service}}</div>
-        <div class="tag" style="text-align:right">{{formatDate order.createdAt dateStyle="short" timeStyle="short"}}</div>
+        <div class="tag" style="text-align:right">{{formatDate order.createdAt dateStyle="short" timeStyle="short" locale="vi-VN"}}</div>
       </div>
     </div>
 
@@ -627,7 +627,7 @@ const SHIPPING_LABEL = `<!doctype html>
     <div class="row line">
       <div class="pad grow">
         <div class="tag">Thu hộ (COD)</div>
-        <div class="cod-amount">{{#if cod}}{{currency cod}}{{else}}Không thu hộ{{/if}}</div>
+        <div class="cod-amount">{{#if cod}}{{currency cod locale="vi-VN" currency="VND"}}{{else}}Không thu hộ{{/if}}</div>
         <div class="tag" style="margin-top:.8mm">Khối lượng {{order.weight}} kg · {{order.pieces}} kiện</div>
         <div class="tag">Mã đơn {{order.reference}}</div>
       </div>

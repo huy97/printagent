@@ -8,7 +8,8 @@ import { submitPdfJob, submitTemplateJob, previewTemplate } from '../core/printS
 import { listTemplates, getTemplate } from '../render/templates.js';
 import { getConfig } from '../core/config.js';
 import { getTunnelStatus, tunnelEvents } from '../core/tunnel.js';
-import { t } from '../i18n/index.js';
+import { t, localeFromRequest } from '../i18n/index.js';
+import { badRequest, serializeError, unauthorized } from '../util/errors.js';
 import { logEvents } from '../util/logger.js';
 import { createLogger } from '../util/logger.js';
 import { shortId } from '../util/id.js';
@@ -56,7 +57,7 @@ export function attachWebSocket(server) {
       }
       const origins = getConfig().server.corsOrigins ?? [];
       const origin = req.headers.origin;
-      // Trình duyệt gắn Origin: chỉ nhận same-origin hoặc origin đã khai báo.
+      // Browsers send Origin: accept only same-origin or explicitly allowed origins.
       if (!origin || isSameOrigin(req) || isSelfServedOrigin(req) || origins.includes('*') || origins.includes(origin)) {
         done(true);
         return;
@@ -67,7 +68,7 @@ export function attachWebSocket(server) {
   });
   const clients = new Set();
 
-  // Lỗi của http server được ws phát lại; không bắt sẽ làm sập tiến trình.
+  // ws re-emits http server errors; leaving them unhandled would crash the process.
   wss.on('error', (error) => log.error(`WebSocket: ${error.message}`));
 
   wss.on('connection', (socket, request) => {
@@ -78,6 +79,8 @@ export function attachWebSocket(server) {
       query: { apiKey: url.searchParams.get('apiKey') ?? url.searchParams.get('api_key') },
     };
     const auth = authorize(fakeReq);
+    const locale = localeFromRequest({ headers: request.headers, query: { lang: url.searchParams.get('lang') } });
+    const fail = (error) => serializeError(error, locale);
 
     const client = {
       id: shortId('ws'),
@@ -89,10 +92,10 @@ export function attachWebSocket(server) {
     clients.add(client);
 
     if (!auth.ok) {
-      send(socket, { type: 'auth_required', message: t('ws.auth_required') });
+      send(socket, { type: 'auth_required', key: 'ws.auth_required', message: t('ws.auth_required', null, locale) });
       setTimeout(() => {
         if (!client.authorized) {
-          send(socket, { type: 'error', payload: { message: t('ws.unauthorized') } });
+          send(socket, { type: 'error', payload: fail(unauthorized('ws.unauthorized')) });
           socket.close(4401, 'unauthorized');
         }
       }, 10000).unref?.();
@@ -113,7 +116,7 @@ export function attachWebSocket(server) {
       try {
         message = JSON.parse(String(raw));
       } catch {
-        send(socket, { type: 'error', payload: { message: t('ws.bad_json') } });
+        send(socket, { type: 'error', payload: fail(badRequest('ws.bad_json')) });
         return;
       }
 
@@ -126,14 +129,14 @@ export function attachWebSocket(server) {
           send(socket, { id: message.id, type: 'result', payload: { authorized: true, clientId: client.id } });
         } else {
           recordAuthFailure(request);
-          send(socket, { id: message.id, type: 'error', payload: { message: t('ws.key_invalid') } });
+          send(socket, { id: message.id, type: 'error', payload: fail(unauthorized('ws.key_invalid')) });
           socket.close(4401, 'unauthorized');
         }
         return;
       }
 
       if (!client.authorized) {
-        send(socket, { id: message.id, type: 'error', payload: { message: t('ws.unauthorized') } });
+        send(socket, { id: message.id, type: 'error', payload: fail(unauthorized('ws.unauthorized')) });
         return;
       }
 
@@ -148,7 +151,10 @@ export function attachWebSocket(server) {
         send(socket, {
           id: message.id,
           type: 'error',
-          payload: { message: `Lệnh không hỗ trợ: ${message.type}`, supported: Object.keys(HANDLERS) },
+          payload: {
+            ...fail(badRequest('ws.unsupported_command', { type: message.type })),
+            supported: Object.keys(HANDLERS),
+          },
         });
         return;
       }
@@ -163,7 +169,7 @@ export function attachWebSocket(server) {
         send(socket, {
           id: message.id,
           type: 'error',
-          payload: { message: error.message, code: error.code ?? 'error' },
+          payload: fail(error),
         });
       }
     });
@@ -185,7 +191,7 @@ export function attachWebSocket(server) {
   tunnelEvents.on('changed', (payload) => broadcast('tunnel', 'tunnel.changed', payload));
   logEvents.on('log', (entry) => broadcast('log', 'log', entry));
 
-  log.info('WebSocket sẵn sàng tại /ws');
+  log.info('WebSocket ready at /ws');
   return { wss, broadcast, clients };
 }
 

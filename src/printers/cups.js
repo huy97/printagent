@@ -106,8 +106,8 @@ async function defaultMedia(printer) {
 
 export async function printFile(filePath, options = {}) {
   const args = ['-d', options.printer, '-t', (options.title || 'PrintAgent job').slice(0, 120)];
-  // PDF khổ riêng không có paperSize: không gửi media thì macOS rasterize theo khổ PDF (80x297mm) thay vì
-  // khổ giấy đang lắp, nên chỉ định rõ khổ mặc định của máy in để fit-to-page co/căn giữa đúng.
+  // A custom-size PDF has no paperSize: without media macOS rasterizes at the PDF size (80x297mm) instead of
+  // the loaded paper, so pass the printer's default size explicitly for fit-to-page to scale and center.
   const media = options.raw ? null : options.media || options.paperSize || (await defaultMedia(options.printer));
   args.push(...buildOptions({ ...options, media }));
   args.push(filePath);

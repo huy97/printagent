@@ -88,7 +88,7 @@ export function TemplatesTab() {
         data,
         page: template.page,
       })
-      // Bill text hiển thị thẳng bằng <pre>: blob text/plain nhúng trong iframe không chạy trên mọi trình duyệt.
+      // Text receipts render directly in <pre>: a text/plain blob in an iframe does not work in every browser.
       setPreviewText(template.engine === 'text' ? await blob.text() : null)
       setPreviewUrl(URL.createObjectURL(blob))
       setLayout(rendered)
@@ -197,7 +197,7 @@ export function TemplatesTab() {
         JSON.stringify({ ...saved, sampleData: null, updatedAt: null }) || sampleText !== savedSample
     : current.content !== blank.content || current.name !== blank.name || sampleText !== savedSample
 
-  /** Rời template đang sửa dở thì hỏi trước, tránh mất nội dung vừa gõ. */
+  /** Confirm before leaving a template with unsaved edits. */
   const leaveDraft = (action: () => void) => {
     if (!dirty) {
       action()

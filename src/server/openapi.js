@@ -1,7 +1,7 @@
 import { getConfig } from '../core/config.js';
 
 const ERROR_RESPONSE = {
-  description: 'Lỗi',
+  description: 'Error',
   content: {
     'application/json': {
       schema: { $ref: '#/components/schemas/Error' },
@@ -10,9 +10,9 @@ const ERROR_RESPONSE = {
 };
 
 const RENDER_HEADERS = {
-  'X-Render-Width-Mm': { description: 'Chiều rộng thật của trang PDF, tính bằng mm', schema: { type: 'number' } },
-  'X-Render-Height-Mm': { description: 'Chiều cao thật của trang PDF, tính bằng mm', schema: { type: 'number' } },
-  'X-Render-Pages': { description: 'Số trang của PDF; lớn hơn 1 nghĩa là nội dung tràn khổ đã đặt', schema: { type: 'integer' } },
+  'X-Render-Width-Mm': { description: 'Actual PDF page width in mm', schema: { type: 'number' } },
+  'X-Render-Height-Mm': { description: 'Actual PDF page height in mm', schema: { type: 'number' } },
+  'X-Render-Pages': { description: 'PDF page count; more than 1 means the content overflows the configured page', schema: { type: 'integer' } },
 };
 
 const SCHEMAS = {
@@ -24,9 +24,19 @@ const SCHEMAS = {
         properties: {
           code: {
             type: 'string',
-            enum: ['bad_request', 'unauthorized', 'not_found', 'internal_error'],
+            enum: [
+              'bad_request',
+              'unauthorized',
+              'local_only',
+              'not_found',
+              'payload_too_large',
+              'too_many_attempts',
+              'internal_error',
+            ],
           },
-          message: { type: 'string', description: 'Mô tả lỗi bằng tiếng Việt' },
+          key: { type: 'string', example: 'error.printer_not_found', description: 'Stable i18n key for client-side translation' },
+          params: { type: ['object', 'null'], description: 'Values interpolated into the message for this key' },
+          message: { type: 'string', description: 'Message translated into the request locale (x-locale, ?lang=, accept-language)' },
           details: { type: ['object', 'null'] },
         },
       },
@@ -41,7 +51,7 @@ const SCHEMAS = {
         type: 'string',
         enum: ['queued', 'rendering', 'printing', 'completed', 'failed', 'canceled'],
       },
-      printer: { type: ['string', 'null'], description: 'null nghĩa là dùng máy in mặc định của agent' },
+      printer: { type: ['string', 'null'], description: 'null means the agent default printer' },
       copies: { type: 'integer' },
       title: { type: 'string' },
       templateId: { type: ['string', 'null'] },
@@ -51,7 +61,9 @@ const SCHEMAS = {
       bytes: { type: ['integer', 'null'] },
       attempts: { type: 'integer' },
       origin: { type: 'string', example: 'api:pos-terminal' },
-      error: { type: ['string', 'null'] },
+      error: { type: ['string', 'null'], description: 'Error message translated into the request locale' },
+      errorKey: { type: ['string', 'null'], example: 'error.print_failed', description: 'Stable i18n key of the error' },
+      errorParams: { type: ['object', 'null'], description: 'Values interpolated into the error message' },
       createdAt: { type: 'string', format: 'date-time' },
       startedAt: { type: ['string', 'null'], format: 'date-time' },
       finishedAt: { type: ['string', 'null'], format: 'date-time' },
@@ -60,7 +72,7 @@ const SCHEMAS = {
   Printer: {
     type: 'object',
     properties: {
-      name: { type: 'string', description: 'Tên hệ thống, dùng làm giá trị cho trường printer' },
+      name: { type: 'string', description: 'System name, use it as the printer field value' },
       description: { type: 'string' },
       location: { type: ['string', 'null'] },
       status: { type: 'string', enum: ['ready', 'paused', 'offline', 'unknown'] },
@@ -72,11 +84,11 @@ const SCHEMAS = {
   },
   PageSetup: {
     type: 'object',
-    description: 'Khổ giấy khi render HTML thành PDF',
+    description: 'Page setup used when rendering HTML to PDF',
     properties: {
       format: { type: 'string', example: 'A4' },
       width: { type: 'string', example: '80mm' },
-      height: { type: 'string', example: 'auto', description: 'auto để cắt theo chiều cao nội dung (giấy cuộn)' },
+      height: { type: 'string', example: 'auto', description: 'auto cuts at the content height (roll paper)' },
       landscape: { type: 'boolean' },
       marginTop: { type: 'string', example: '10mm' },
       marginRight: { type: 'string' },
@@ -84,7 +96,7 @@ const SCHEMAS = {
       marginLeft: { type: 'string' },
       frame: {
         type: 'boolean',
-        description: 'Mặc định true: khi có khổ tuỳ chỉnh, agent chèn sẵn doctype và CSS khung (bỏ lề mặc định của trình duyệt, box-sizing: border-box). Đặt false nếu template tự lo hết',
+        description: 'Defaults to true: with a custom size the agent injects a doctype and frame CSS (no default browser margin, box-sizing: border-box). Set false if the template handles everything itself',
       },
     },
   },
@@ -95,8 +107,13 @@ const SCHEMAS = {
       paperSize: { type: 'string', example: 'A4' },
       orientation: { type: 'string', enum: ['portrait', 'landscape'] },
       fitToPage: { type: 'boolean' },
-      raw: { type: 'boolean', description: 'Gửi thẳng byte tới máy in, dùng cho ESC/POS' },
-      extraOptions: { type: 'object', additionalProperties: { type: 'string' } },
+      raw: { type: 'boolean', description: 'Send raw bytes straight to the printer, for ESC/POS' },
+      extraOptions: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'CUPS -o parameters, each written as "key=value" (Linux/macOS only, ignored on Windows)',
+        example: ['print-quality=5', 'ColorModel=Gray'],
+      },
     },
   },
   Template: {
@@ -106,8 +123,8 @@ const SCHEMAS = {
       name: { type: 'string' },
       description: { type: 'string' },
       engine: { type: 'string', enum: ['html', 'text'] },
-      content: { type: 'string', description: 'Mã Handlebars' },
-      sampleData: { type: 'object', description: 'Khuôn dữ liệu đúng để truyền vào trường data' },
+      content: { type: 'string', description: 'Handlebars source' },
+      sampleData: { type: 'object', description: 'Example of the exact shape to pass in the data field' },
       page: { $ref: '#/components/schemas/PageSetup' },
       printing: { type: 'object', properties: { raw: { type: 'boolean' }, copies: { type: 'integer' } } },
       updatedAt: { type: 'string', format: 'date-time' },
@@ -126,12 +143,12 @@ function jsonResponse(description, schema) {
 const PATHS = {
   '/api/health': {
     get: {
-      tags: ['Hệ thống'],
-      summary: 'Trạng thái agent',
-      description: 'Không cần API key. Có key sẽ trả thêm hàng đợi, nền tảng và tunnel.',
+      tags: ['System'],
+      summary: 'Agent status',
+      description: 'No API key required. With a key the response also includes the queue, platform and tunnel.',
       security: [],
       responses: {
-        200: jsonResponse('Trạng thái', {
+        200: jsonResponse('Status', {
           type: 'object',
           properties: {
             ok: { type: 'boolean' },
@@ -154,17 +171,17 @@ const PATHS = {
   },
   '/api/info': {
     get: {
-      tags: ['Hệ thống'],
-      summary: 'Thông tin agent và tình trạng bộ render',
-      responses: { 200: jsonResponse('Thông tin', { type: 'object' }), default: ERROR_RESPONSE },
+      tags: ['System'],
+      summary: 'Agent info and renderer health',
+      responses: { 200: jsonResponse('Info', { type: 'object' }), default: ERROR_RESPONSE },
     },
   },
   '/api/print/pdf': {
     post: {
-      tags: ['In'],
-      summary: 'In một file PDF',
+      tags: ['Print'],
+      summary: 'Print a PDF file',
       description:
-        'Chọn đúng một nguồn tài liệu: content (base64), url, filePath, hoặc upload multipart field file. Trả về ngay với status queued, trừ khi đặt wait: true.',
+        'Pick exactly one source: content (base64), url, filePath, or a multipart upload in the file field. Returns immediately with status queued unless wait: true is set.',
       requestBody: {
         required: true,
         content: {
@@ -172,15 +189,15 @@ const PATHS = {
             schema: {
               type: 'object',
               properties: {
-                content: { type: 'string', format: 'byte', description: 'Nội dung PDF mã hoá base64' },
-                url: { type: 'string', format: 'uri', description: 'Chỉ http/https, chặn dải mạng nội bộ' },
-                filePath: { type: 'string', description: 'Mặc định bị tắt, bật trong cấu hình printing' },
+                content: { type: 'string', format: 'byte', description: 'Base64-encoded PDF content' },
+                url: { type: 'string', format: 'uri', description: 'http/https only; private network ranges are blocked' },
+                filePath: { type: 'string', description: 'Disabled by default, enable it in the printing config' },
                 fileName: { type: 'string' },
                 printer: { type: 'string' },
                 copies: { type: 'integer', default: 1 },
                 title: { type: 'string' },
                 options: { $ref: '#/components/schemas/PrintOptions' },
-                wait: { type: 'boolean', default: false, description: 'Chờ in xong mới trả về' },
+                wait: { type: 'boolean', default: false, description: 'Wait for the print to finish before responding' },
                 waitTimeoutMs: { type: 'integer', default: 60000 },
                 clientId: { type: 'string' },
               },
@@ -190,7 +207,7 @@ const PATHS = {
             schema: {
               type: 'object',
               properties: {
-                file: { type: 'string', format: 'binary', description: 'Tối đa 64MB' },
+                file: { type: 'string', format: 'binary', description: 'Up to 64MB' },
                 printer: { type: 'string' },
                 copies: { type: 'integer' },
                 wait: { type: 'boolean' },
@@ -200,24 +217,24 @@ const PATHS = {
         },
       },
       responses: {
-        202: jsonResponse('Job đã vào hàng đợi', { $ref: '#/components/schemas/Job' }),
+        202: jsonResponse('Job queued', { $ref: '#/components/schemas/Job' }),
         default: ERROR_RESPONSE,
       },
     },
   },
   '/api/print/template': {
     post: {
-      tags: ['In'],
-      summary: 'In từ template và biến JSON',
+      tags: ['Print'],
+      summary: 'Print from a template and JSON variables',
       description:
-        'Dùng templateId của mẫu đã lưu, hoặc truyền template inline kèm engine. Lấy khuôn dữ liệu đúng bằng GET /api/templates/{id} rồi đọc sampleData.',
+        'Use the templateId of a saved template, or pass an inline template with its engine. Get the exact data shape from GET /api/templates/{id} and read sampleData.',
       requestBody: jsonBody({
         type: 'object',
         properties: {
           templateId: { type: 'string', example: 'vat-invoice-a4' },
-          template: { type: 'string', description: 'Mã Handlebars inline, thay cho templateId' },
+          template: { type: 'string', description: 'Inline Handlebars source, instead of templateId' },
           engine: { type: 'string', enum: ['html', 'text'] },
-          data: { type: 'object', description: 'Biến truyền vào template' },
+          data: { type: 'object', description: 'Variables passed to the template' },
           page: { $ref: '#/components/schemas/PageSetup' },
           printer: { type: 'string' },
           copies: { type: 'integer', default: 1 },
@@ -229,21 +246,21 @@ const PATHS = {
         },
       }),
       responses: {
-        202: jsonResponse('Job đã vào hàng đợi', { $ref: '#/components/schemas/Job' }),
+        202: jsonResponse('Job queued', { $ref: '#/components/schemas/Job' }),
         default: ERROR_RESPONSE,
       },
     },
   },
   '/api/print/render': {
     post: {
-      tags: ['In'],
-      summary: 'Render template nhưng không in',
+      tags: ['Print'],
+      summary: 'Render a template without printing',
       parameters: [
         {
           name: 'format',
           in: 'query',
           schema: { type: 'string', enum: ['pdf', 'html', 'base64'] },
-          description: 'Bỏ trống trả PDF nhị phân; html trả mã HTML; base64 trả JSON kèm chuỗi base64',
+          description: 'Empty returns binary PDF; html returns the HTML source; base64 returns JSON with a base64 string',
         },
       ],
       requestBody: jsonBody({
@@ -258,7 +275,7 @@ const PATHS = {
       }),
       responses: {
         200: {
-          description: 'Tài liệu đã render',
+          description: 'Rendered document',
           headers: RENDER_HEADERS,
           content: {
             'application/pdf': { schema: { type: 'string', format: 'binary' } },
@@ -277,13 +294,13 @@ const PATHS = {
   },
   '/api/printers': {
     get: {
-      tags: ['Máy in'],
-      summary: 'Danh sách máy in đang kết nối',
+      tags: ['Printers'],
+      summary: 'List connected printers',
       parameters: [
-        { name: 'refresh', in: 'query', schema: { type: 'string', enum: ['1', 'true'] }, description: 'Quét lại thay vì lấy cache' },
+        { name: 'refresh', in: 'query', schema: { type: 'string', enum: ['1', 'true'] }, description: 'Rescan instead of using the cache' },
       ],
       responses: {
-        200: jsonResponse('Danh sách', {
+        200: jsonResponse('List', {
           type: 'object',
           properties: {
             printers: { type: 'array', items: { $ref: '#/components/schemas/Printer' } },
@@ -298,47 +315,47 @@ const PATHS = {
   },
   '/api/printers/scan': {
     post: {
-      tags: ['Máy in'],
-      summary: 'Quét lại máy in',
-      responses: { 200: jsonResponse('Kết quả quét', { type: 'object' }), default: ERROR_RESPONSE },
+      tags: ['Printers'],
+      summary: 'Rescan printers',
+      responses: { 200: jsonResponse('Scan result', { type: 'object' }), default: ERROR_RESPONSE },
     },
   },
   '/api/printers/{name}': {
     get: {
-      tags: ['Máy in'],
-      summary: 'Chi tiết máy in kèm tuỳ chọn driver',
+      tags: ['Printers'],
+      summary: 'Printer details with driver options',
       parameters: [{ name: 'name', in: 'path', required: true, schema: { type: 'string' } }],
       responses: {
-        200: jsonResponse('Chi tiết', { $ref: '#/components/schemas/Printer' }),
+        200: jsonResponse('Details', { $ref: '#/components/schemas/Printer' }),
         default: ERROR_RESPONSE,
       },
     },
   },
   '/api/printers/{name}/default': {
     post: {
-      tags: ['Máy in'],
-      summary: 'Đặt làm máy in mặc định của agent',
+      tags: ['Printers'],
+      summary: 'Set as the agent default printer',
       parameters: [{ name: 'name', in: 'path', required: true, schema: { type: 'string' } }],
       responses: {
-        200: jsonResponse('Đã đặt', { type: 'object', properties: { defaultPrinter: { type: 'string' } } }),
+        200: jsonResponse('Updated', { type: 'object', properties: { defaultPrinter: { type: 'string' } } }),
         default: ERROR_RESPONSE,
       },
     },
   },
   '/api/printers/{name}/test': {
     post: {
-      tags: ['Máy in'],
-      summary: 'In trang thử',
+      tags: ['Printers'],
+      summary: 'Print a test page',
       parameters: [{ name: 'name', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: { 200: jsonResponse('Job in thử', { $ref: '#/components/schemas/Job' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Test job', { $ref: '#/components/schemas/Job' }), default: ERROR_RESPONSE },
     },
   },
   '/api/templates': {
     get: {
       tags: ['Template'],
-      summary: 'Danh sách template',
+      summary: 'List templates',
       responses: {
-        200: jsonResponse('Danh sách', {
+        200: jsonResponse('List', {
           type: 'object',
           properties: { templates: { type: 'array', items: { $ref: '#/components/schemas/Template' } } },
         }),
@@ -346,18 +363,18 @@ const PATHS = {
     },
     post: {
       tags: ['Template'],
-      summary: 'Tạo template',
+      summary: 'Create a template',
       requestBody: jsonBody({ $ref: '#/components/schemas/Template' }),
-      responses: { 201: jsonResponse('Đã tạo', { $ref: '#/components/schemas/Template' }), default: ERROR_RESPONSE },
+      responses: { 201: jsonResponse('Created', { $ref: '#/components/schemas/Template' }), default: ERROR_RESPONSE },
     },
   },
   '/api/templates/seeds': {
     get: {
       tags: ['Template'],
-      summary: 'Liệt kê bộ mẫu có sẵn của một ngôn ngữ',
+      summary: 'List the starter templates for a language',
       parameters: [{ name: 'lang', in: 'query', schema: { type: 'string', enum: ['vi', 'en'] } }],
       responses: {
-        200: jsonResponse('Bộ mẫu', {
+        200: jsonResponse('Starter set', {
           type: 'object',
           properties: {
             locale: { type: 'string' },
@@ -381,13 +398,13 @@ const PATHS = {
   '/api/templates/seed': {
     post: {
       tags: ['Template'],
-      summary: 'Tạo bộ mẫu của một ngôn ngữ, mẫu đã có được giữ nguyên',
+      summary: 'Create the starter templates for a language, keeping existing ones',
       requestBody: jsonBody({
         type: 'object',
         properties: { locale: { type: 'string', enum: ['vi', 'en'] } },
       }),
       responses: {
-        201: jsonResponse('Kết quả tạo', {
+        201: jsonResponse('Creation result', {
           type: 'object',
           properties: {
             locale: { type: 'string' },
@@ -403,29 +420,29 @@ const PATHS = {
   '/api/templates/{id}': {
     get: {
       tags: ['Template'],
-      summary: 'Chi tiết template kèm sampleData',
+      summary: 'Template details with sampleData',
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: { 200: jsonResponse('Chi tiết', { $ref: '#/components/schemas/Template' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Details', { $ref: '#/components/schemas/Template' }), default: ERROR_RESPONSE },
     },
     put: {
       tags: ['Template'],
-      summary: 'Sửa template',
+      summary: 'Update a template',
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       requestBody: jsonBody({ $ref: '#/components/schemas/Template' }),
-      responses: { 200: jsonResponse('Đã lưu', { $ref: '#/components/schemas/Template' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Saved', { $ref: '#/components/schemas/Template' }), default: ERROR_RESPONSE },
     },
     delete: {
       tags: ['Template'],
-      summary: 'Xoá template',
+      summary: 'Delete a template',
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: { 200: jsonResponse('Đã xoá', { type: 'object' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Deleted', { type: 'object' }), default: ERROR_RESPONSE },
     },
   },
   '/api/templates/{id}/preview': {
     post: {
       tags: ['Template'],
-      summary: 'Render thử template đã lưu',
-      description: 'Không truyền data thì dùng sampleData của chính template đó.',
+      summary: 'Preview a saved template',
+      description: 'Without data, the template sampleData is used.',
       parameters: [
         { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
         { name: 'format', in: 'query', schema: { type: 'string', enum: ['pdf', 'html'] } },
@@ -439,7 +456,7 @@ const PATHS = {
       ),
       responses: {
         200: {
-          description: 'Tài liệu đã render',
+          description: 'Rendered document',
           headers: RENDER_HEADERS,
           content: {
             'application/pdf': { schema: { type: 'string', format: 'binary' } },
@@ -453,14 +470,14 @@ const PATHS = {
   '/api/jobs': {
     get: {
       tags: ['Job'],
-      summary: 'Danh sách job',
+      summary: 'List jobs',
       parameters: [
         { name: 'status', in: 'query', schema: { type: 'string', enum: ['queued', 'rendering', 'printing', 'completed', 'failed', 'canceled'] } },
         { name: 'printer', in: 'query', schema: { type: 'string' } },
         { name: 'limit', in: 'query', schema: { type: 'integer' } },
       ],
       responses: {
-        200: jsonResponse('Danh sách', {
+        200: jsonResponse('List', {
           type: 'object',
           properties: {
             jobs: { type: 'array', items: { $ref: '#/components/schemas/Job' } },
@@ -473,15 +490,15 @@ const PATHS = {
   '/api/jobs/{id}': {
     get: {
       tags: ['Job'],
-      summary: 'Chi tiết job',
+      summary: 'Job details',
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: { 200: jsonResponse('Chi tiết', { $ref: '#/components/schemas/Job' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Details', { $ref: '#/components/schemas/Job' }), default: ERROR_RESPONSE },
     },
   },
   '/api/jobs/{id}/file': {
     get: {
       tags: ['Job'],
-      summary: 'Tải file tài liệu của job',
+      summary: 'Download the job document',
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       responses: {
         200: { description: 'File', content: { 'application/pdf': { schema: { type: 'string', format: 'binary' } } } },
@@ -492,122 +509,122 @@ const PATHS = {
   '/api/jobs/{id}/cancel': {
     post: {
       tags: ['Job'],
-      summary: 'Huỷ job đang chờ',
+      summary: 'Cancel a pending job',
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: { 200: jsonResponse('Job sau khi huỷ', { $ref: '#/components/schemas/Job' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Canceled job', { $ref: '#/components/schemas/Job' }), default: ERROR_RESPONSE },
     },
   },
   '/api/jobs/{id}/retry': {
     post: {
       tags: ['Job'],
-      summary: 'In lại job đã chạy',
+      summary: 'Reprint a finished job',
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: { 200: jsonResponse('Job mới', { $ref: '#/components/schemas/Job' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('New job', { $ref: '#/components/schemas/Job' }), default: ERROR_RESPONSE },
     },
   },
   '/api/settings': {
     get: {
-      tags: ['Hệ thống'],
-      summary: 'Cấu hình hiện tại',
-      responses: { 200: jsonResponse('Cấu hình', { type: 'object' }) },
+      tags: ['System'],
+      summary: 'Current configuration',
+      responses: { 200: jsonResponse('Configuration', { type: 'object' }) },
     },
     put: {
-      tags: ['Hệ thống'],
-      summary: 'Sửa cấu hình',
-      description: 'Một số trường nhạy cảm (đường dẫn binary, tắt xác thực) chỉ nhận request đến trực tiếp từ máy chạy agent.',
+      tags: ['System'],
+      summary: 'Update the configuration',
+      description: 'Some sensitive fields (binary paths, disabling authentication) are only accepted from the agent machine itself.',
       requestBody: jsonBody({ type: 'object' }),
-      responses: { 200: jsonResponse('Đã lưu', { type: 'object' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Saved', { type: 'object' }), default: ERROR_RESPONSE },
     },
   },
   '/api/logs': {
     get: {
-      tags: ['Hệ thống'],
-      summary: 'Nhật ký gần đây',
+      tags: ['System'],
+      summary: 'Recent logs',
       parameters: [{ name: 'limit', in: 'query', schema: { type: 'integer', default: 200 } }],
-      responses: { 200: jsonResponse('Nhật ký', { type: 'object' }) },
+      responses: { 200: jsonResponse('Logs', { type: 'object' }) },
     },
   },
   '/api/tunnel': {
     get: {
       tags: ['Tunnel'],
-      summary: 'Trạng thái tunnel công khai',
-      responses: { 200: jsonResponse('Trạng thái', { type: 'object' }) },
+      summary: 'Public tunnel status',
+      responses: { 200: jsonResponse('Status', { type: 'object' }) },
     },
   },
   '/api/tunnel/start': {
     post: {
       tags: ['Tunnel'],
-      summary: 'Bật tunnel',
+      summary: 'Start the tunnel',
       requestBody: jsonBody(
         { type: 'object', properties: { provider: { type: 'string', enum: ['cloudflare', 'ngrok'] } } },
         false,
       ),
-      responses: { 200: jsonResponse('Trạng thái sau khi bật', { type: 'object' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Status after start', { type: 'object' }), default: ERROR_RESPONSE },
     },
   },
   '/api/tunnel/stop': {
     post: {
       tags: ['Tunnel'],
-      summary: 'Tắt tunnel',
-      responses: { 200: jsonResponse('Trạng thái sau khi tắt', { type: 'object' }), default: ERROR_RESPONSE },
+      summary: 'Stop the tunnel',
+      responses: { 200: jsonResponse('Status after stop', { type: 'object' }), default: ERROR_RESPONSE },
     },
   },
   '/api/setup': {
     get: {
-      tags: ['Hệ thống'],
-      summary: 'Kết quả kiểm tra cài đặt',
-      responses: { 200: jsonResponse('Tình trạng từng bước', { type: 'object' }) },
+      tags: ['System'],
+      summary: 'Setup check result',
+      responses: { 200: jsonResponse('Per-step status', { type: 'object' }) },
     },
   },
   '/api/setup/progress': {
     get: {
-      tags: ['Hệ thống'],
-      summary: 'Tiến độ lần chạy cài đặt hiện tại',
-      responses: { 200: jsonResponse('Tiến độ', { type: 'object' }) },
+      tags: ['System'],
+      summary: 'Progress of the current setup run',
+      responses: { 200: jsonResponse('Progress', { type: 'object' }) },
     },
   },
   '/api/setup/run': {
     post: {
-      tags: ['Hệ thống'],
-      summary: 'Chạy cài đặt',
-      description: 'Chỉ nhận request đến trực tiếp từ máy chạy agent.',
+      tags: ['System'],
+      summary: 'Run setup',
+      description: 'Only accepted from the agent machine itself.',
       requestBody: jsonBody({ type: 'object', properties: { enableService: { type: 'boolean' } } }, false),
-      responses: { 200: jsonResponse('Kết quả', { type: 'object' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Result', { type: 'object' }), default: ERROR_RESPONSE },
     },
   },
   '/api/setup/service': {
     post: {
-      tags: ['Hệ thống'],
-      summary: 'Đăng ký hoặc gỡ chạy nền',
-      description: 'Chỉ nhận request đến trực tiếp từ máy chạy agent.',
+      tags: ['System'],
+      summary: 'Install or remove the background service',
+      description: 'Only accepted from the agent machine itself.',
       requestBody: jsonBody({
         type: 'object',
         properties: { action: { type: 'string', enum: ['install', 'uninstall'] } },
       }),
-      responses: { 200: jsonResponse('Trạng thái dịch vụ', { type: 'object' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Service status', { type: 'object' }), default: ERROR_RESPONSE },
     },
   },
   '/api/apikeys': {
     get: {
-      tags: ['Hệ thống'],
-      summary: 'Danh sách API key',
-      description: 'Chỉ xem được khi request đến trực tiếp từ máy chạy agent, không qua tunnel. Giá trị khoá bị che.',
-      responses: { 200: jsonResponse('Danh sách', { type: 'object' }), default: ERROR_RESPONSE },
+      tags: ['System'],
+      summary: 'List API keys',
+      description: 'Only visible from the agent machine itself, not through a tunnel. Key values are masked.',
+      responses: { 200: jsonResponse('List', { type: 'object' }), default: ERROR_RESPONSE },
     },
     post: {
-      tags: ['Hệ thống'],
-      summary: 'Tạo API key',
-      description: 'Chỉ tạo được từ máy chạy agent. Giá trị khoá đầy đủ chỉ trả về đúng một lần này.',
+      tags: ['System'],
+      summary: 'Create an API key',
+      description: 'Only from the agent machine itself. The full key value is returned this one time only.',
       requestBody: jsonBody({ type: 'object', properties: { name: { type: 'string' } } }),
-      responses: { 200: jsonResponse('Khoá vừa tạo', { type: 'object' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Created key', { type: 'object' }), default: ERROR_RESPONSE },
     },
   },
   '/api/apikeys/{id}': {
     delete: {
-      tags: ['Hệ thống'],
-      summary: 'Xoá API key',
+      tags: ['System'],
+      summary: 'Delete an API key',
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      responses: { 200: jsonResponse('Đã xoá', { type: 'object' }), default: ERROR_RESPONSE },
+      responses: { 200: jsonResponse('Deleted', { type: 'object' }), default: ERROR_RESPONSE },
     },
   },
 };
@@ -661,7 +678,7 @@ function withOperationIds(paths) {
             ...operation,
             responses: operation.security?.length === 0
               ? operation.responses
-              : { ...operation.responses, 401: { ...ERROR_RESPONSE, description: 'Thiếu hoặc sai API key' } },
+              : { ...operation.responses, 401: { ...ERROR_RESPONSE, description: 'Missing or invalid API key' } },
           },
         ]),
       ),
@@ -677,17 +694,17 @@ export function buildOpenApi(baseUrl) {
       title: 'PrintAgent API',
       version: process.env.npm_package_version ?? '1.0.0',
       description:
-        'Agent in ấn chạy trên máy local: nhận PDF hoặc template kèm biến JSON rồi in ra máy in đang kết nối. Bản rút gọn cho tác nhân AI: /llms.txt (thêm ?lang=en cho bản tiếng Anh). Ngoài REST còn có WebSocket tại /ws và MCP tại /mcp. Thông báo lỗi trả về theo ngôn ngữ của header x-locale, query ?lang= hoặc accept-language; mỗi lỗi kèm trường key ổn định để client tự dịch.',
+        'A print agent running on the local machine: it takes a PDF, or a template with JSON variables, and prints to a connected printer. Condensed docs for AI agents: /llms.txt (add ?lang=vi for Vietnamese). Besides REST there is a WebSocket at /ws and MCP at /mcp. Error messages follow the x-locale header, the ?lang= query or accept-language (default en); every error carries a stable key and params so clients can translate it themselves.',
     },
     servers: [{ url: baseUrl, description: `Agent ${config.agent.name}` }],
     security: [{ apiKey: [] }, { bearer: [] }],
     tags: [
-      { name: 'In', description: 'Gửi lệnh in' },
-      { name: 'Máy in', description: 'Máy in đang kết nối' },
-      { name: 'Template', description: 'Mẫu in Handlebars' },
-      { name: 'Job', description: 'Hàng đợi và lịch sử in' },
-      { name: 'Tunnel', description: 'Mở agent ra Internet' },
-      { name: 'Hệ thống', description: 'Trạng thái và cấu hình' },
+      { name: 'Print', description: 'Submit print jobs' },
+      { name: 'Printers', description: 'Connected printers' },
+      { name: 'Template', description: 'Handlebars print templates' },
+      { name: 'Job', description: 'Print queue and history' },
+      { name: 'Tunnel', description: 'Expose the agent to the Internet' },
+      { name: 'System', description: 'Status and configuration' },
     ],
     paths: withOperationIds(PATHS),
     components: {

@@ -5,19 +5,24 @@ import * as jobs from '../../core/jobs.js';
 import { submitPdfJob, submitTemplateJob } from '../../core/printService.js';
 import { PATHS } from '../../core/paths.js';
 import { notFound, badRequest } from '../../util/errors.js';
+import { localeFromRequest } from '../../i18n/index.js';
+
+const localized = (req, job) => jobs.localizeJob(job, localeFromRequest(req));
 
 export const jobsRouter = Router();
 
 jobsRouter.get('/', (req, res) => {
   res.json({
-    jobs: jobs.listJobs({ limit: req.query.limit, status: req.query.status, printer: req.query.printer }),
+    jobs: jobs
+      .listJobs({ limit: req.query.limit, status: req.query.status, printer: req.query.printer })
+      .map((job) => localized(req, job)),
     stats: jobs.stats(),
   });
 });
 
 jobsRouter.get('/:id', (req, res, next) => {
   try {
-    res.json(jobs.getJob(req.params.id));
+    res.json(localized(req, jobs.getJob(req.params.id)));
   } catch (error) {
     next(error);
   }
@@ -47,7 +52,7 @@ jobsRouter.get('/:id/file', (req, res, next) => {
 
 jobsRouter.post('/:id/cancel', async (req, res, next) => {
   try {
-    res.json(await jobs.cancelJob(req.params.id));
+    res.json(localized(req, await jobs.cancelJob(req.params.id)));
   } catch (error) {
     next(error);
   }
@@ -64,16 +69,15 @@ jobsRouter.post('/:id/retry', async (req, res, next) => {
       origin: 'retry',
     };
     if (job.type === 'template' && (job.templateId || job.templateSource)) {
-      res.json(
-        await submitTemplateJob({
-          ...common,
-          templateId: job.templateId ?? undefined,
-          template: job.templateId ? undefined : job.templateSource,
-          engine: job.engine ?? undefined,
-          page: job.page ?? undefined,
-          data: job.data ?? {},
-        }),
-      );
+      const retried = await submitTemplateJob({
+        ...common,
+        templateId: job.templateId ?? undefined,
+        template: job.templateId ? undefined : job.templateSource,
+        engine: job.engine ?? undefined,
+        page: job.page ?? undefined,
+        data: job.data ?? {},
+      });
+      res.json(localized(req, retried));
       return;
     }
     const filePath = job.filePath ? path.resolve(job.filePath) : null;
@@ -81,7 +85,7 @@ jobsRouter.post('/:id/retry', async (req, res, next) => {
     if (!filePath || !filePath.startsWith(`${root}${path.sep}`) || !existsSync(filePath)) {
       throw badRequest('error.job_no_source');
     }
-    res.json(await submitPdfJob({ ...common, content: readFileSync(filePath), fileName: job.fileName }));
+    res.json(localized(req, await submitPdfJob({ ...common, content: readFileSync(filePath), fileName: job.fileName })));
   } catch (error) {
     next(error);
   }

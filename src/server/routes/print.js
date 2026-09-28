@@ -2,14 +2,16 @@ import { Router } from 'express';
 import multer from 'multer';
 import { submitPdfJob, submitTemplateJob, previewTemplate } from '../../core/printService.js';
 import { badRequest } from '../../util/errors.js';
+import { localizeJob } from '../../core/jobs.js';
+import { localeFromRequest } from '../../i18n/index.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 64 * 1024 * 1024 } });
 
 export const printRouter = Router();
 
 /**
- * Khổ thật của bản render đi kèm response để màn xem trước báo số đo và cảnh báo tràn khổ.
- * Đặt ở header nên thân response vẫn là PDF thuần, tải thẳng ra file được.
+ * The rendered page size travels with the response so the preview can show it and warn on overflow.
+ * It lives in headers so the body stays a plain PDF that can be saved as-is.
  */
 export function sendLayoutHeaders(res, layout) {
   if (!layout) return;
@@ -66,7 +68,7 @@ printRouter.post('/pdf', upload.single('file'), async (req, res, next) => {
       origin: req.auth?.key ? `api:${req.auth.key.name}` : 'api',
       clientId: body.clientId,
     });
-    res.status(202).json(job);
+    res.status(202).json(localizeJob(job, localeFromRequest(req)));
   } catch (error) {
     next(error);
   }
@@ -91,7 +93,7 @@ printRouter.post('/template', async (req, res, next) => {
       origin: req.auth?.key ? `api:${req.auth.key.name}` : 'api',
       clientId: body.clientId,
     });
-    res.status(202).json(job);
+    res.status(202).json(localizeJob(job, localeFromRequest(req)));
   } catch (error) {
     next(error);
   }

@@ -8,7 +8,7 @@ import { configureLogger } from '../util/logger.js';
 const ICON = { ok: '[ok]', warn: '[!]', error: '[x]' };
 
 async function confirm(question, fallback = true, nonInteractive = false) {
-  // Không có terminal thật (script, launchd, node --watch nền): không tự quyết thay người dùng.
+  // No real terminal (script, launchd, background node --watch): do not decide for the user.
   if (!process.stdin.isTTY || !process.stdout.isTTY) return nonInteractive;
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   try {
@@ -16,7 +16,7 @@ async function confirm(question, fallback = true, nonInteractive = false) {
     if (!answer) return fallback;
     return answer === 'y' || answer === 'yes' || answer === 'c' || answer === 'co';
   } catch {
-    // Ctrl+D hoặc stdin đóng giữa chừng: dùng mặc định thay vì dừng cả wizard.
+    // Ctrl+D or stdin closed midway: use the default instead of aborting the wizard.
     return fallback;
   } finally {
     rl.close();
@@ -46,7 +46,7 @@ async function askLocale() {
 }
 
 /**
- * Wizard chạy trong terminal: tuần tự, dừng ngay khi có bước lỗi.
+ * Terminal wizard: runs sequentially and stops at the first failing step.
  */
 export async function runSetupCli({ enableService, seedTemplates, autoFix = true, quiet = false, ask = true } = {}) {
   if (!quiet) console.log(`${t('cli.setup.title')}\n`);
@@ -65,7 +65,7 @@ export async function runSetupCli({ enableService, seedTemplates, autoFix = true
   let useService = enableService;
   if (useService === undefined) {
     const remembered = readSetupState().enableService;
-    // node --watch khởi động lại liên tục, không hỏi lại lựa chọn đã trả lời.
+    // node --watch restarts constantly; do not ask again for an answered choice.
     if (typeof remembered === 'boolean' || !ask) {
       useService = remembered ?? false;
     } else {

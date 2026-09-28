@@ -1,11 +1,11 @@
-import { apiKeyStore } from './api'
+import { apiKeyStore, type ErrorPayload } from './api'
 
 export type WsEvent =
   | { type: 'event'; event: string; payload: unknown; at: string }
   | { type: 'welcome'; payload: unknown }
-  | { type: 'auth_required'; message: string }
+  | { type: 'auth_required'; key: string; message: string }
   | { type: 'result'; id?: string; payload: unknown }
-  | { type: 'error'; id?: string; payload: { message: string } }
+  | { type: 'error'; id?: string; payload: ErrorPayload }
 
 interface WsHandlers {
   onEvent: (event: string, payload: unknown) => void

@@ -22,7 +22,7 @@ templatesRouter.get('/seeds', (req, res) => {
 templatesRouter.post('/seed', (req, res, next) => {
   try {
     const locale = LOCALES.includes(req.body?.locale) ? req.body.locale : getConfig().agent.locale;
-    // force: bộ mẫu ngôn ngữ khác vẫn tạo được sau khi màn cài đặt đã chạy một lần.
+    // force: a set in another language can still be created after setup has already run once.
     res.status(201).json({ locale, ...seedTemplates({ locale, force: true }) });
   } catch (error) {
     next(error);
@@ -67,7 +67,7 @@ templatesRouter.delete('/:id', (req, res, next) => {
 
 templatesRouter.post('/:id/preview', async (req, res, next) => {
   try {
-    // Không truyền data thì lấy sampleData của template để xem trước có nội dung.
+    // Without data, preview with the template's sampleData so it is not empty.
     const template = getTemplate(req.params.id, { withContent: false });
     const rendered = await previewTemplate({
       templateId: req.params.id,

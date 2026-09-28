@@ -44,11 +44,11 @@ export async function scanPrinters({ force = false } = {}) {
         printers.length !== previous.size ||
         printers.some((printer) => previous.get(printer.name) !== printer.status);
       if (changed) printerEvents.emit('changed', getCachedPrinters());
-      log.debug(`Quét thấy ${printers.length} máy in`);
+      log.debug(`Found ${printers.length} printer(s)`);
       return getCachedPrinters();
     } catch (error) {
       lastScanFailed = true;
-      log.error(`Quét máy in thất bại: ${error.message}`);
+      log.error(`Printer scan failed: ${error.message}`);
       return getCachedPrinters();
     } finally {
       scanning = null;

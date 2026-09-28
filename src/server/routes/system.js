@@ -27,7 +27,7 @@ export const systemRouter = Router();
 
 export function healthHandler(req, res) {
   const status = tunnel.getTunnelStatus();
-  // Agent tự dò tunnel bằng cách gọi hostname công khai rồi đối chiếu nonce này.
+  // The agent probes its own tunnel by calling the public hostname and comparing this nonce.
   const probe = req.headers['x-printagent-probe'];
   if (probe) res.setHeader('x-printagent-probe', String(probe).slice(0, 64));
   if (!req.auth?.ok) {
@@ -80,8 +80,8 @@ systemRouter.get('/settings', (req, res) => {
 });
 
 /**
- * Các trường dưới đây quyết định binary nào được agent spawn, hoặc tắt hẳn xác thực,
- * nên chỉ nhận khi request đến trực tiếp từ máy chạy agent (không qua tunnel/trang web khác).
+ * These fields decide which binaries the agent spawns or can switch authentication off,
+ * so they are only accepted from the agent machine itself (not via a tunnel or another site).
  */
 const LOCAL_ONLY_FIELDS = [
   ['render', 'chromePath'],
@@ -142,10 +142,7 @@ systemRouter.put('/settings', (req, res, next) => {
 
 function requireLocal(req) {
   if (!req.auth?.local) {
-    throw new AppError('Thao tác với API key chỉ thực hiện được từ máy đang chạy agent', {
-      status: 403,
-      code: 'local_only',
-    });
+    throw new AppError('error.apikey_local_only', { status: 403, code: 'local_only' });
   }
 }
 
@@ -223,11 +220,11 @@ systemRouter.get('/setup', async (req, res, next) => {
 systemRouter.post('/setup/run', (req, res, next) => {
   try {
     requireLocal(req);
-    // Các bước có thể tải Chromium hoặc Node nên chạy nền, UI hỏi tiến độ qua /setup/progress.
+    // Steps may download Chromium or Node, so run in the background; the UI polls /setup/progress.
     const wantTemplates = req.body?.seedTemplates === true;
     const locale = LOCALES.includes(req.body?.locale) ? req.body.locale : localeFromRequest(req);
     rememberTemplateChoice(wantTemplates);
-    // Ngôn ngữ chọn ở màn cài đặt là ngôn ngữ của cả agent: log, CLI và bộ mẫu đều theo nó.
+    // The language picked on the setup screen becomes the agent locale for logs, CLI and starter templates.
     if (req.body?.locale && locale !== getConfig().agent.locale) {
       updateConfig({ agent: { locale } });
       setLocale(locale);

@@ -97,7 +97,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       setNeedsKey(false)
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-        // Đã có key mà vẫn bị từ chối thì phải nói rõ, nếu không hộp thoại chỉ nháy lên rồi hiện lại.
+        // A stored key that still gets rejected must be reported, otherwise the dialog just flickers and reappears.
         if (apiKeyStore.get()) toast.error(translate(getLocale(), 'agent.key_rejected'))
         setNeedsKey(true)
       }

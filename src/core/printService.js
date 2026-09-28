@@ -9,6 +9,7 @@ import { renderTemplate, readPdfPageSize, readPdfPageCount, isStandardPaperSize 
 import { getTemplate } from '../render/templates.js';
 import { badRequest } from '../util/errors.js';
 import { createLogger } from '../util/logger.js';
+import { t, getLocale } from '../i18n/index.js';
 
 const log = createLogger('print');
 const dnsLookup = lookup;
@@ -67,7 +68,7 @@ async function assertUrlAllowed(target) {
   return parsed;
 }
 
-/** Tự đi theo redirect để kiểm tra từng chặng, tránh bị vòng về mạng nội bộ. */
+/** Follows redirects manually so every hop is checked and cannot bounce into the private network. */
 async function fetchChecked(url, maxBytes) {
   let current = await assertUrlAllowed(url);
   for (let hop = 0; hop < 5; hop += 1) {
@@ -157,14 +158,14 @@ function hasExplicitPaper(input) {
   return Boolean(input?.paperSize || input?.media);
 }
 
-// PDF khổ riêng (bill 80mm, tem) mà vẫn gắn khổ mặc định A4 thì driver thu cả trang vào giấy, chữ bé tí.
+// Tagging a custom-size PDF (80mm receipt, label) with the default A4 size makes the driver shrink it to unreadable text.
 function fitPaperToPdf(options, buffer) {
   if (options.raw) return;
   const size = readPdfPageSize(buffer);
   if (!size || isStandardPaperSize(size)) return;
   options.paperSize = null;
   options.media = null;
-  log.info(`PDF khổ riêng ${Math.round((size.width * 25.4) / 72)}x${Math.round((size.height * 25.4) / 72)}mm, dùng khổ giấy của máy in`);
+  log.info(`Custom-size PDF ${Math.round((size.width * 25.4) / 72)}x${Math.round((size.height * 25.4) / 72)}mm, using the printer paper size`);
 }
 
 export async function submitPdfJob(input = {}) {
@@ -202,7 +203,7 @@ export async function submitPdfJob(input = {}) {
     return { filePath: stored, bytes: statSync(stored).size };
   });
 
-  log.info(`Đã nhận job PDF ${job.id} -> ${printer}`);
+  log.info(`Accepted PDF job ${job.id} -> ${printer}`);
   return input.wait ? jobs.waitForJob(job.id, input.waitTimeoutMs ?? 60000) : job;
 }
 
@@ -254,7 +255,7 @@ export async function submitTemplateJob(input = {}) {
     return { filePath: stored, bytes: rendered.buffer.length, fileName: `${currentJob.id}.pdf` };
   });
 
-  log.info(`Đã nhận job template ${job.id} (${input.templateId ?? 'inline'}) -> ${printer}`);
+  log.info(`Accepted template job ${job.id} (${input.templateId ?? 'inline'}) -> ${printer}`);
   return input.wait ? jobs.waitForJob(job.id, input.waitTimeoutMs ?? 60000) : job;
 }
 
@@ -272,8 +273,8 @@ function buildRawPayload(text, escpos = {}) {
 const PT_PER_MM = 72 / 25.4;
 
 /**
- * Khổ thật của bản render kèm số trang, để màn xem trước báo ngay khi nội dung
- * tràn khỏi khổ đã cấu hình thay vì đợi in ra giấy mới biết.
+ * Actual rendered size and page count, so the preview flags content overflowing the
+ * configured page before anything is printed.
  */
 function layoutOf(rendered) {
   if (rendered.engine !== 'html') return null;
@@ -299,16 +300,17 @@ export async function previewTemplate(input = {}) {
 
 export async function printTestPage(printerName) {
   const printer = await printers.resolvePrinterName(printerName);
-  const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8">
+  const locale = getLocale();
+  const html = `<!doctype html><html lang="${locale}"><head><meta charset="utf-8">
 <style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:32px}
 h1{font-size:22px;margin:0 0 8px}table{border-collapse:collapse;margin-top:16px;font-size:13px}
 td,th{border:1px solid #999;padding:6px 10px;text-align:left}</style></head>
-<body><h1>PrintAgent - Trang in thử</h1>
-<p>Máy in: <strong>${escapeHtml(printer)}</strong></p>
-<table><tr><th>Thời điểm</th><td>${new Date().toLocaleString('vi-VN')}</td></tr>
+<body><h1>${escapeHtml(t('test_page.heading'))}</h1>
+<p>${escapeHtml(t('test_page.printer'))}: <strong>${escapeHtml(printer)}</strong></p>
+<table><tr><th>${escapeHtml(t('test_page.time'))}</th><td>${new Date().toLocaleString(locale)}</td></tr>
 <tr><th>Agent</th><td>${escapeHtml(getConfig().agent.name)} (${getConfig().agent.id})</td></tr>
-<tr><th>Nền tảng</th><td>${process.platform} / node ${process.version}</td></tr></table>
-<p style="margin-top:24px">Nếu bạn đọc được trang này, cấu hình in đang hoạt động bình thường.</p>
+<tr><th>${escapeHtml(t('test_page.platform'))}</th><td>${process.platform} / node ${process.version}</td></tr></table>
+<p style="margin-top:24px">${escapeHtml(t('test_page.footer'))}</p>
 </body></html>`;
   return submitTemplateJob({
     template: html,

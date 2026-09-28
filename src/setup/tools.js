@@ -13,9 +13,9 @@ export function hasCommand(command) {
 }
 
 /**
- * Chạy lệnh cài đặt và cho người dùng thấy tiến độ: có `log` thì đẩy từng dòng
- * về web UI, không thì đổ thẳng ra terminal.
- * Node chặn spawn .cmd/.bat khi không qua shell nên Windows phải tự bật shell.
+ * Runs an install command and shows progress: with `log` each line is streamed to
+ * the web UI, otherwise it goes straight to the terminal.
+ * Node refuses to spawn .cmd/.bat without a shell, so Windows enables it explicitly.
  */
 export function runVisible(command, args = [], { timeout = 900000, shell, log } = {}) {
   const useShell = shell ?? (process.platform === 'win32' && /\.(cmd|bat)$/i.test(command));
@@ -60,8 +60,8 @@ export function runBash(script, options = {}) {
 }
 
 /**
- * Ưu tiên sudo không hỏi mật khẩu. Chỉ hỏi khi đang ở terminal thật: chạy từ web
- * UI mà bật prompt mật khẩu thì người dùng không thấy đâu mà nhập.
+ * Prefer passwordless sudo. Only prompt in a real terminal: a password prompt
+ * triggered from the web UI would be invisible to the user.
  */
 export async function sudo(args, options = {}) {
   const quiet = await tryRun('sudo', ['-n', ...args], { timeout: options.timeout ?? 300000 });
@@ -92,8 +92,8 @@ const LINUX_INSTALL = {
 };
 
 /**
- * Cài gói theo trình quản lý gói của từng hệ điều hành.
- * `names` là map: brew/winget/choco/linux -> tên gói.
+ * Installs a package with the platform's package manager.
+ * `names` maps brew/winget/choco/linux to the package name.
  */
 export async function installPackage(names, options = {}) {
   const manager = detectPackageManager();
@@ -148,8 +148,8 @@ async function download(url, dest) {
 }
 
 /**
- * Trang phát hành không có link "latest" nên lấy tag mới nhất trên GitHub
- * (dạng "3.6.1rel"), lỗi mạng hay hết quota thì dùng bản đã kiểm chứng.
+ * The download page has no "latest" link, so read the newest GitHub tag
+ * (like "3.6.1rel"), falling back to a known-good version on network or quota errors.
  */
 async function latestSumatraVersion() {
   try {
@@ -167,8 +167,8 @@ async function latestSumatraVersion() {
 }
 
 /**
- * Tải SumatraPDF bản portable về thư mục dữ liệu. Không cần quyền admin và không
- * phụ thuộc winget/choco, nên máy mới tinh vẫn in được PDF đúng khổ giấy.
+ * Downloads portable SumatraPDF into the data directory. It needs no admin rights and
+ * no winget/choco, so a fresh machine can still print PDFs at the right paper size.
  */
 export async function installSumatraPortable({ log } = {}) {
   if (process.platform !== 'win32') return null;
@@ -180,7 +180,7 @@ export async function installSumatraPortable({ log } = {}) {
   const archive = path.join(dir, 'sumatrapdf.zip');
   const staging = path.join(dir, 'sumatrapdf-unzip');
   const target = path.join(dir, 'SumatraPDF.exe');
-  // Nháy đơn trong đường dẫn (tên người dùng lạ) sẽ phá chuỗi lệnh PowerShell.
+  // A single quote in the path (unusual user names) would break the PowerShell command.
   const psQuote = (value) => `'${value.replace(/'/g, "''")}'`;
 
   try {

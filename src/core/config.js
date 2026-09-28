@@ -9,7 +9,7 @@ const DEFAULTS = {
   agent: {
     name: 'PrintAgent',
     id: null,
-    locale: 'vi',
+    locale: 'en',
   },
   server: {
     host: '0.0.0.0',

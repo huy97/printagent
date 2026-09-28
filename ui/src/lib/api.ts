@@ -60,6 +60,8 @@ export interface Job {
   options: Record<string, unknown>
   origin: string
   error: string | null
+  errorKey?: string | null
+  errorParams?: Record<string, string | number> | null
   output: string | null
   createdAt: string
   finishedAt: string | null
@@ -216,13 +218,34 @@ export interface LogEntry {
   message: string
 }
 
+export interface ErrorPayload {
+  code?: string
+  key?: string
+  params?: Record<string, string | number>
+  message?: string
+  details?: unknown
+}
+
 export class ApiError extends Error {
   status: number
   code?: string
-  constructor(message: string, status: number, code?: string) {
-    super(message)
+  key?: string
+  params?: Record<string, string | number>
+  constructor(status: number, payload: ErrorPayload = {}) {
+    super(payload.message ?? `HTTP ${status}`)
     this.status = status
-    this.code = code
+    this.code = payload.code
+    this.key = payload.key
+    this.params = payload.params
+  }
+}
+
+async function toApiError(response: Response): Promise<ApiError> {
+  const text = await response.text()
+  try {
+    return new ApiError(response.status, JSON.parse(text)?.error)
+  } catch {
+    return new ApiError(response.status)
   }
 }
 
@@ -242,18 +265,13 @@ interface RequestOptions {
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const response = await rawRequest(path, options)
+  if (!response.ok) throw await toApiError(response)
   const text = await response.text()
-  let data: unknown = {}
   try {
-    data = text ? JSON.parse(text) : {}
+    return (text ? JSON.parse(text) : {}) as T
   } catch {
-    data = { raw: text }
+    return { raw: text } as T
   }
-  if (!response.ok) {
-    const payload = data as { error?: { message?: string; code?: string } }
-    throw new ApiError(payload?.error?.message ?? `HTTP ${response.status}`, response.status, payload?.error?.code)
-  }
-  return data as T
 }
 
 async function rawRequest(path: string, options: RequestOptions = {}): Promise<Response> {
@@ -287,16 +305,7 @@ export interface RenderResult {
 
 async function blobRequest(path: string, options: RequestOptions = {}): Promise<Blob> {
   const response = await rawRequest(path, options)
-  if (!response.ok) {
-    const text = await response.text()
-    let message = `HTTP ${response.status}`
-    try {
-      message = JSON.parse(text)?.error?.message ?? message
-    } catch {
-      /* giữ nguyên message mặc định */
-    }
-    throw new ApiError(message, response.status)
-  }
+  if (!response.ok) throw await toApiError(response)
   return response.blob()
 }
 
@@ -337,16 +346,7 @@ export const api = {
   printTemplate: (body: Record<string, unknown>) => request<Job>('/api/print/template', { method: 'POST', body }),
   renderPreview: async (body: Record<string, unknown>): Promise<RenderResult> => {
     const response = await rawRequest('/api/print/render', { method: 'POST', body })
-    if (!response.ok) {
-      const text = await response.text()
-      let message = `HTTP ${response.status}`
-      try {
-        message = JSON.parse(text)?.error?.message ?? message
-      } catch {
-        /* giữ nguyên message mặc định */
-      }
-      throw new ApiError(message, response.status)
-    }
+    if (!response.ok) throw await toApiError(response)
     const width = Number(response.headers.get('X-Render-Width-Mm'))
     const height = Number(response.headers.get('X-Render-Height-Mm'))
     const pages = Number(response.headers.get('X-Render-Pages'))
@@ -385,7 +385,7 @@ export const api = {
 }
 
 /**
- * Chạy cài đặt rồi hỏi tiến độ tới khi xong, vì các bước có thể tải Chromium hoặc Node.
+ * Starts setup and polls until it finishes, since steps may download Chromium or Node.
  */
 export async function runSetupUntilDone(
   body: { enableService?: boolean; seedTemplates?: boolean; locale?: string; autoFix?: boolean },

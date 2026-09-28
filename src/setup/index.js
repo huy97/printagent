@@ -13,8 +13,8 @@ const STATE_FILE = path.join(PATHS.data, 'setup.json');
 export const SETUP_VERSION = 1;
 
 /**
- * Bước được lưu và truyền đi dưới dạng key + tham số, chỉ dịch ở biên:
- * terminal dùng ngôn ngữ của agent, còn API dịch theo ngôn ngữ của người gọi.
+ * Steps are stored and passed around as key + params and translated only at the edge:
+ * the terminal uses the agent locale, the API uses the caller's locale.
  */
 export function localizeStep(step, locale) {
   if (!step) return step;
@@ -61,11 +61,11 @@ export function isSetupComplete() {
 }
 
 /**
- * Chạy tuần tự các bước, dừng ngay ở bước lỗi đầu tiên.
+ * Runs the steps in order, stopping at the first failing step.
  */
 /**
- * Chạy tuần tự các bước. Bước lỗi sẽ được tự sửa nếu có cách; chỉ dừng khi
- * một bước bắt buộc vẫn hỏng sau khi đã thử sửa.
+ * Runs the steps in order. Failing steps are auto-fixed when possible; it only stops
+ * when a required step is still broken after the fix attempt.
  */
 export async function runSetup({
   enableService = false,
@@ -141,7 +141,7 @@ async function safeCheck(step, context) {
 }
 
 /**
- * Danh sách bước để UI dựng sẵn khung trước khi chạy.
+ * Step list so the UI can render the skeleton before the run starts.
  */
 export function stepPlan(locale) {
   return STEPS.map((step) => ({
@@ -180,8 +180,8 @@ export function getSetupProgress(locale) {
 }
 
 /**
- * Chạy wizard trong nền và ghi tiến độ để web UI hỏi lại bằng polling.
- * Gọi lại khi đang chạy sẽ chỉ trả về tiến độ hiện tại.
+ * Runs the wizard in the background and records progress for the web UI to poll.
+ * Calling it again while running only returns the current progress.
  */
 export function startSetupRun({ enableService = false, seedTemplates = false, locale = null, autoFix = true } = {}) {
   if (progress.running) return getSetupProgress();

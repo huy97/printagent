@@ -60,7 +60,7 @@ export function JobsTab() {
       toast.error(t('jobs.url_required'))
       return
     }
-    // Giữ lại URL khi in thất bại để người dùng sửa rồi thử lại.
+    // Keep the URL when printing fails so the user can fix it and retry.
     const ok = await submit({
       url: url.trim(),
       printer: printer === '__default' ? undefined : printer,

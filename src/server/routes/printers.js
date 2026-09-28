@@ -3,6 +3,8 @@ import * as printers from '../../printers/index.js';
 import { getConfig, updateConfig } from '../../core/config.js';
 import { printTestPage } from '../../core/printService.js';
 import { notFound } from '../../util/errors.js';
+import { localizeJob } from '../../core/jobs.js';
+import { localeFromRequest } from '../../i18n/index.js';
 
 export const printersRouter = Router();
 
@@ -48,7 +50,7 @@ printersRouter.post('/:name/default', async (req, res, next) => {
 
 printersRouter.post('/:name/test', async (req, res, next) => {
   try {
-    res.json(await printTestPage(req.params.name));
+    res.json(localizeJob(await printTestPage(req.params.name), localeFromRequest(req)));
   } catch (error) {
     next(error);
   }

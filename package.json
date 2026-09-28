@@ -1,6 +1,6 @@
 {
   "name": "@hyydev/printagent",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Local print agent with REST API, WebSocket, MCP server and web UI",
   "keywords": [
     "print",
@@ -39,8 +39,8 @@
     "install.sh",
     "install.ps1",
     "llms.txt",
-    "llms.en.txt",
-    "README.en.md"
+    "llms.vi.txt",
+    "README.vi.md"
   ],
   "engines": {
     "node": ">=22"

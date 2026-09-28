@@ -63,6 +63,28 @@ export const vi = {
   'error.job_interrupted': 'Agent khởi động lại khi job chưa hoàn tất',
   'error.prepare_failed': 'Chuẩn bị tài liệu thất bại: {message}',
 
+  'error.internal': 'Lỗi nội bộ: {message}',
+  'error.request_failed': 'Yêu cầu thất bại: {message}',
+  'error.invalid_json_body': 'Nội dung request không phải JSON hợp lệ',
+  'error.payload_too_large': 'Nội dung request quá lớn',
+  'error.upload_too_large': 'File tải lên vượt quá giới hạn dung lượng',
+  'error.upload_too_many_files': 'Tải lên quá nhiều file',
+  'error.upload_unexpected_field': 'Trường tải lên "{field}" không hợp lệ',
+  'error.apikey_local_only': 'Thao tác với API key chỉ thực hiện được từ máy đang chạy agent',
+  'error.mcp_post_only': 'Endpoint MCP chỉ hỗ trợ POST (streamable HTTP, chế độ stateless)',
+  'error.raw_share_missing':
+    'In raw trên Windows cần chia sẻ máy in và cấu hình printing.rawShareName (ví dụ: \\\\localhost\\POS58)',
+  'error.port_in_use':
+    'Cổng {port} đang bị chiếm. Agent có thể đã chạy nền (printagent service status) hoặc đổi cổng bằng: printagent start --port 7799',
+  'error.print_failed': 'In thất bại: {message}',
+  'ws.unsupported_command': 'Lệnh không hỗ trợ: {type}',
+
+  'test_page.heading': 'PrintAgent - Trang in thử',
+  'test_page.printer': 'Máy in',
+  'test_page.time': 'Thời điểm',
+  'test_page.platform': 'Nền tảng',
+  'test_page.footer': 'Nếu bạn đọc được trang này, cấu hình in đang hoạt động bình thường.',
+
   'setup.step.node': 'Phiên bản Node.js',
   'setup.step.node.ok': 'Node {version} trên {platform}/{arch}',
   'setup.step.node.too_old': 'Node {version} quá cũ, cần >= {min}',

@@ -66,7 +66,7 @@ function searchInPath() {
   return null;
 }
 
-// Không có Chromium của Puppeteer thì dò trình duyệt sẵn có trên máy.
+// Fall back to a locally installed browser when Puppeteer's Chromium is missing.
 export function findSystemChrome() {
   const candidates = [
     ...(SYSTEM_CHROME_PATHS[process.platform] ?? []),
@@ -82,9 +82,9 @@ async function launchWithFallback(launchOptions) {
     if (launchOptions.executablePath) throw error;
     const systemChrome = findSystemChrome();
     if (!systemChrome) throw error;
-    log.warn(`Không dùng được Chromium của Puppeteer, chuyển sang ${systemChrome}`);
+    log.warn(`Puppeteer's Chromium is unusable, switching to ${systemChrome}`);
     const instance = await puppeteer.launch({ ...launchOptions, executablePath: systemChrome });
-    // Ghi lại để lần sau khỏi dò và người dùng thấy đường dẫn trong tab Cài đặt.
+    // Persist it so the next start skips detection and the path shows up in the Settings tab.
     updateConfig({ render: { chromePath: systemChrome } });
     return instance;
   }
@@ -114,7 +114,7 @@ async function getBrowser() {
           browser = null;
           browserPromise = null;
         });
-        log.info('Đã khởi động Chromium để render PDF');
+        log.info('Started Chromium for PDF rendering');
         return instance;
       })
       .catch((error) => {
@@ -149,7 +149,7 @@ export async function closeBrowser() {
   browser = null;
   browserPromise = null;
   if (instance) {
-    log.info('Đóng Chromium do nhàn rỗi');
+    log.info('Closing idle Chromium');
     await instance.close().catch(() => {});
   }
 }
@@ -173,7 +173,7 @@ export function renderTemplateString(source, data, cacheKey, noEscape = false) {
   }
 }
 
-/** Chiều cao để trống hoặc ghi "auto" đều là đo theo nội dung. */
+/** An empty or "auto" height means measure the content. */
 export function isAutoHeight(height) {
   return !height || String(height).trim().toLowerCase() === 'auto';
 }
@@ -194,8 +194,8 @@ function buildPdfOptions(page = {}) {
   };
   if (page.width) {
     options.width = page.width;
-    // Bỏ trống chiều cao nghĩa là theo nội dung; htmlToPdf đo trước và thay bằng số đo thật,
-    // còn 297mm chỉ là lối thoát khi đo hụt.
+    // An empty height follows the content; htmlToPdf measures first and substitutes the real value,
+    // 297mm is only the fallback when measuring fails.
     options.height = isAutoHeight(page.height) ? '297mm' : page.height;
   } else if (page.height && !isAutoHeight(page.height)) {
     options.height = page.height;
@@ -250,7 +250,7 @@ function pdfChunks(buffer) {
   return [...text.split('endobj'), ...(text.includes('/ObjStm') ? objectStreamChunks(buffer, text) : [])];
 }
 
-/** Số trang của PDF, lấy từ /Count lớn nhất của cây /Pages; 1 nếu không đọc được. */
+/** PDF page count from the largest /Count in the /Pages tree; 1 when it cannot be read. */
 export function readPdfPageCount(buffer) {
   let count = 0;
   for (const chunk of pdfChunks(buffer)) {
@@ -261,7 +261,7 @@ export function readPdfPageCount(buffer) {
   return count || 1;
 }
 
-/** Khổ trang đầu tiên của PDF theo point (đã tính /Rotate), hoặc null nếu không đọc được. */
+/** First page size in points (with /Rotate applied), or null when it cannot be read. */
 export function readPdfPageSize(buffer) {
   const chunks = pdfChunks(buffer);
   let inherited = null;
@@ -298,18 +298,18 @@ function cssLengthToPx(value) {
   return Number(match[1]) * (CSS_UNITS[unit] ?? 1);
 }
 
-// Khổ giấy cuộn (máy in nhiệt) không có chiều cao cố định: đo nội dung rồi cắt đúng chỗ.
+// Roll paper (thermal printers) has no fixed height: measure the content and cut right there.
 async function measureAutoHeight(tab, page) {
   const config = getConfig().render;
-  // Lề phải lấy đúng thứ buildPdfOptions sẽ dùng, kể cả khi template bỏ trống và rơi về config,
-  // nếu không thì đo hụt và trang bị cắt làm đôi.
+  // Margins must match what buildPdfOptions will use, including the config fallback when the template
+  // leaves them empty; otherwise the measurement comes up short and the page is split in two.
   const margin = (side) => cssLengthToPx(page[side] ?? config[side]) ?? 0;
   const width = cssLengthToPx(page.width);
   if (!width) return null;
   const inner = Math.max(Math.floor(width - margin('marginLeft') - margin('marginRight')), 1);
   await tab.setViewport({ width: inner, height: 600 });
-  // Đo theo nội dung chứ không theo body hay documentElement: cả hai đều không nhỏ hơn khung nhìn
-  // nên bill ngắn cũng bị kéo thành 600px.
+  // Measure the content, not body or documentElement: neither is ever smaller than the viewport,
+  // so a short receipt would be stretched to 600px.
   const content = await tab.evaluate(() => {
     const body = document.body;
     const range = document.createRange();
@@ -318,7 +318,7 @@ async function measureAutoHeight(tab, page) {
     for (const node of body.querySelectorAll('*')) {
       bottom = Math.max(bottom, node.getBoundingClientRect().bottom);
     }
-    // Nội dung không bao gồm padding và margin dưới của body, nhưng giấy thì có.
+    // The content excludes the body's bottom padding and margin, but the paper includes them.
     const tail = (element) => {
       const style = getComputedStyle(element);
       return (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.marginBottom) || 0);
@@ -330,9 +330,9 @@ async function measureAutoHeight(tab, page) {
   return `${Math.max(Math.ceil(content + vertical + padding), 1)}px`;
 }
 
-// HTML người dùng dán vào không tự biết khổ giấy: chèn sẵn khung để lề mặc định 8px của
-// trình duyệt và padding không đẩy nội dung tràn ra ngoài tem. Style đứng trước mọi style của
-// template nên template tự đặt lại được; đặt page.frame = false để bỏ hẳn.
+// Pasted HTML knows nothing about the paper size: inject a frame so the browser's default 8px margin
+// and padding do not push content off the label. It precedes every template style so templates can
+// override it; set page.frame = false to drop it entirely.
 const FRAME_ANCHORS = [/<head[^>]*>/i, /<body[^>]*>/i, /<html[^>]*>/i, /<!doctype[^>]*>/i];
 
 function pageFrameStyle(page) {
@@ -347,8 +347,8 @@ export function withPageFrame(html, page = {}) {
   const custom = page.width || (page.height && !isAutoHeight(page.height));
   if (!custom || page.frame === false) return html;
   const style = pageFrameStyle(page);
-  // Thiếu doctype là trình duyệt vào quirks mode, ở đó body bị kéo cao bằng khung nhìn và
-  // phép đo chiều cao tự động hụt hẳn so với nội dung thật.
+  // Without a doctype the browser enters quirks mode, where body stretches to the viewport height
+  // and the automatic height measurement falls well short of the real content.
   const doctype = /^\s*<!doctype/i.test(html) ? '' : '<!doctype html>';
   for (const anchor of FRAME_ANCHORS) {
     const match = anchor.exec(html);
