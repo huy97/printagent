@@ -39,6 +39,7 @@ jobs:
         run: yarn build
 
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        # The token only allows staged publishes; approve the version on npmjs.com afterwards.
+        run: npx -y npm@11 stage publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
