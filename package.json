@@ -1,6 +1,6 @@
 {
   "name": "@hyydev/printagent",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "Local print agent with REST API, WebSocket, MCP server and web UI",
   "keywords": [
     "print",
