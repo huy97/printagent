@@ -38,6 +38,7 @@ export const en = {
   'error.job_no_source': 'The original file for this job is gone, cannot reprint',
 
   'error.service_launchd': 'Could not load the launchd job: {message}',
+  'error.service_persist': 'Could not install a persistent copy for the service: {message}',
   'error.service_task_delete': 'Could not delete the scheduled task: {message}',
   'error.service_unsupported': 'Running as a background service is not supported on {platform} yet',
 

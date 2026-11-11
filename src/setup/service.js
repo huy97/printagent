@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { run, tryRun } from '../util/exec.js';
 import { PATHS } from '../core/paths.js';
 import { badRequest } from '../util/errors.js';
@@ -13,6 +13,46 @@ const UNIT_NAME = 'printagent.service';
 
 export function entryScript() {
   return path.resolve(fileURLToPath(new URL('../../bin/printagent.js', import.meta.url)));
+}
+
+function isEphemeralInstall(script = entryScript()) {
+  return script.split(/[\\/]/).includes('_npx');
+}
+
+function npmCli() {
+  const nodeDir = path.dirname(process.execPath);
+  const candidates = [
+    path.join(nodeDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+  return candidates.find((file) => existsSync(file)) ?? null;
+}
+
+/**
+ * The npx cache can be wiped at any time (npm cache clean, disk cleaners), which
+ * leaves the service pointing at a missing script. Install the same version into
+ * the data dir, matching the layout used by install.sh / install.ps1.
+ */
+async function persistentEntryScript() {
+  const script = entryScript();
+  if (!isEphemeralInstall(script)) return script;
+
+  const cli = npmCli();
+  if (!cli) throw badRequest('error.service_persist', { message: 'npm not found next to node' });
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+  const appDir = path.join(PATHS.data, 'app');
+  mkdirSync(appDir, { recursive: true });
+  const result = await tryRun(
+    process.execPath,
+    [cli, 'install', '-g', '--prefix', appDir, '--no-audit', '--no-fund', `${pkg.name}@${pkg.version}`],
+    { timeout: 15 * 60 * 1000 },
+  );
+  const modulesDir = process.platform === 'win32' ? path.join(appDir, 'node_modules') : path.join(appDir, 'lib', 'node_modules');
+  const installed = path.join(modulesDir, ...pkg.name.split('/'), 'bin', 'printagent.js');
+  if (result.failed || !existsSync(installed)) {
+    throw badRequest('error.service_persist', { message: result.stderr || installed });
+  }
+  return installed;
 }
 
 function plistPath() {
@@ -31,8 +71,8 @@ function escapeXml(value) {
     .replace(/"/g, '&quot;');
 }
 
-function buildPlist() {
-  const args = [process.execPath, entryScript(), 'start']
+function buildPlist(script) {
+  const args = [process.execPath, script, 'start']
     .map((item) => `    <string>${escapeXml(item)}</string>`)
     .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -57,14 +97,14 @@ ${args}
 `;
 }
 
-function buildUnit() {
+function buildUnit(script) {
   return `[Unit]
 Description=PrintAgent - agent in an cuc bo
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=${process.execPath} ${entryScript()} start
+ExecStart=${process.execPath} ${script} start
 Restart=always
 RestartSec=5
 
@@ -77,7 +117,7 @@ async function installDarwin() {
   const target = plistPath();
   mkdirSync(path.dirname(target), { recursive: true });
   mkdirSync(PATHS.logs, { recursive: true });
-  writeFileSync(target, buildPlist());
+  writeFileSync(target, buildPlist(await persistentEntryScript()));
   await tryRun('launchctl', ['bootout', `gui/${process.getuid()}/${LABEL}`]);
   const result = await tryRun('launchctl', ['bootstrap', `gui/${process.getuid()}`, target]);
   if (result.failed) {
@@ -110,7 +150,7 @@ async function statusDarwin() {
 async function installLinux() {
   const target = unitPath();
   mkdirSync(path.dirname(target), { recursive: true });
-  writeFileSync(target, buildUnit());
+  writeFileSync(target, buildUnit(await persistentEntryScript()));
   await run('systemctl', ['--user', 'daemon-reload']);
   await run('systemctl', ['--user', 'enable', '--now', UNIT_NAME]);
   await tryRun('loginctl', ['enable-linger', os.userInfo().username]);
@@ -228,12 +268,13 @@ async function registerTask(xml, fallbackCommand) {
 async function installWindows() {
   mkdirSync(PATHS.data, { recursive: true });
   mkdirSync(PATHS.logs, { recursive: true });
-  writeFileSync(shimPath(), buildVbsShim());
+  const script = await persistentEntryScript();
+  writeFileSync(shimPath(), buildVbsShim(process.execPath, script));
 
   let status = await registerTask(buildTaskXml(), `wscript.exe //B "${shimPath()}"`);
   if (!status.running) {
     // With Windows Script Host disabled the shim cannot run, so call node directly.
-    const args = `"${entryScript()}" start`;
+    const args = `"${script}" start`;
     status = await registerTask(
       buildTaskXml({ command: process.execPath, args }),
       `"${process.execPath}" ${args}`,

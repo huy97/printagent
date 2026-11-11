@@ -39,6 +39,7 @@ export const vi = {
   'error.job_no_source': 'Không còn file gốc của job này để in lại',
 
   'error.service_launchd': 'Không nạp được launchd: {message}',
+  'error.service_persist': 'Không cài được bản cố định cho dịch vụ: {message}',
   'error.service_task_delete': 'Không xoá được tác vụ: {message}',
   'error.service_unsupported': 'Chưa hỗ trợ đăng ký chạy nền trên {platform}',
 
